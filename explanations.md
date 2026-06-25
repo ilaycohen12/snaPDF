@@ -88,7 +88,46 @@ A reference of every technology and concept covered in this project, explained i
 
 **What it is:** AWS's managed Kubernetes service. AWS runs the Kubernetes control plane for you — you only manage the worker nodes.
 
-**How we use it:** Two clusters — `projectview-dev` (t3.medium nodes) and `projectview-prod` (t3.large nodes). The app runs as pods on these clusters, managed by ArgoCD.
+**Two sides of a cluster:**
+
+- **Control Plane** — the brain. Decides where to run your app, watches for crashed pods and restarts them, handles scaling. AWS runs this on their own servers. You never SSH into it — it's a flat ~$73/month fee.
+- **Worker Nodes** — regular EC2 instances (`t3.small` in our case). These sit in your VPC in the private subnet. The control plane tells them what to run. You pay for these like any EC2 instance.
+- **Pods** — the smallest unit in Kubernetes. A pod is one or more containers running together. Your Flask app = one pod per replica. Pods run inside worker nodes.
+
+**Why worker nodes are in the private subnet:** Nodes run your code and have access to internal resources (RDS, Secrets Manager). Private subnet = no inbound internet route. Nodes still reach the internet outbound (to pull images from ECR) via the NAT Gateway.
+
+**What happens when you deploy:**
+1. You push code to GitHub
+2. GitHub Actions builds a Docker image and pushes it to ECR
+3. GitHub Actions updates the Helm values file with the new image tag
+4. ArgoCD sees the change in GitHub
+5. ArgoCD tells the Control Plane: "run this new image"
+6. Control Plane picks a Worker Node and schedules a Pod on it
+7. The Worker Node pulls the image from ECR (via NAT Gateway)
+8. The Pod starts — your Flask app is running
+9. User hits the ALB → ALB routes to the Pod → response goes back
+
+**How we use it:** Two clusters — `projectview-dev` (with `dev` and `staging` namespaces) and `projectview-prod` (with `production` namespace). Both use `t3.small` worker nodes.
+
+---
+
+## RDS (Relational Database Service)
+
+**What it is:** AWS's managed PostgreSQL service. AWS handles backups, patching, and failover — you just use the database.
+
+**Where it lives:** In the same **private subnets** as the EKS worker nodes. Never reachable from the internet.
+
+**How the app connects:**
+```
+Flask app pod (private subnet)
+        ↓  private IP — stays inside the VPC
+RDS PostgreSQL (private subnet)
+```
+Both are inside the same VPC so they talk via internal AWS routing — no NAT, no internet, no ALB involved.
+
+**Security:** RDS has its own Security Group that acts as a firewall. It only allows port 5432 (PostgreSQL) from the EKS worker nodes' Security Group. Nothing else can reach it.
+
+**How the app gets the DB password:** The password is stored in AWS Secrets Manager. The External Secrets Operator pulls it into a Kubernetes Secret. The Flask app reads it as an environment variable. The password never lives in Git or in the Docker image.
 
 ---
 
