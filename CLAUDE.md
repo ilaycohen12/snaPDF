@@ -97,3 +97,5 @@ ProjectView/
 - every command you write me on CLI, write below it what it does. if the command it important write why we need it now.
 - i want to learn! from this project. i need to know everything about it. so we will do it step-step so i can understand.
 - in the file "documentation" write every step we did, and why we did it. split it to infra, bug-fixes, app, workflow, gitops, and another category i you think is neccesary.
+- in the file "progress", mention the progress we done with date and time. make sure to do it.
+
