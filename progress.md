@@ -13,10 +13,11 @@ We set up everything needed before touching any real infrastructure. Installed a
 ---
 
 ## Phase 1 — Infrastructure (Terragrunt)
-- [ ] Step 1 — Write Terraform module: `vpc`
-- [ ] Step 2 — Write Terraform module: `eks`
-- [ ] Step 3 — Write Terraform module: `iam`
-- [ ] Step 4 — Write Terraform module: `addons`
+- [x] Step 1 — Write Terraform module: `vpc` ✅ 25/06/2026
+- [x] Step 2 — Write Terraform module: `eks` ✅ 26/06/2026
+- [x] Step 3 — Write Terraform module: `iam` ✅ 26/06/2026
+- [x] Step 4 — Write Terraform module: `rds` ✅ 26/06/2026
+- [ ] Step 5 — Write Terraform module: `addons`
 - [ ] Step 5 — Write Terragrunt configs for dev + prod
 - [ ] Step 6 — Deploy: vpc → eks → iam → addons
 
