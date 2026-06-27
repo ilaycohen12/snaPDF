@@ -4,98 +4,93 @@
 Build a production-grade cloud infrastructure for a DevOps job interview assessment.
 Demonstrate proficiency in IaC, Kubernetes, GitOps, CI/CD, and secrets management.
 
-## The Full Stack
+## Current State (v0.1.0)
+- Phase 0 and Phase 1 complete — all infrastructure deployed in dev
+- Hello World Flask app deployed to EKS and accessible via ALB in browser
+- Next: Phase 2 — full Flask PDF app + workers + GitHub Actions CI
 
-- **Terragrunt/Terraform** — Two EKS clusters (dev + prod), VPC, IAM, security groups
-- **ArgoCD** — App of Apps pattern on both clusters, GitOps CD, RBAC per environment
-- **AWS ALB Ingress Controller** — External traffic routing with proper annotations
-- **External Secrets Operator** — ClusterSecretStore backed by AWS Secrets Manager, at least one working ExternalSecret
-- **Helm chart** — Generic/reusable chart with per-env values (dev/staging/production)
-- **GitHub Actions CI** — Build, test, push to registry (ECR/GHCR), tag by Git SHA
-- **Sample app** — Simple web server to drive the whole pipeline
+## Three Repos
+- **ProjectView** — Flask app code, Dockerfile, CI pipeline, docs (this repo)
+- **ProjectView-infra** — Terraform modules + Terragrunt configs for dev/prod
+- **ProjectView-gitops** — Helm charts + ArgoCD apps (to be created in Phase 3/4)
 
-## Environment Layout
+## Actual Architecture
 
-- **Dev cluster:** `dev` + `staging` namespaces
-- **Prod cluster:** `production` namespace
-- **Promotion flow:** dev → staging → production via GitOps (ArgoCD)
+### App
+- **Web server** — Flask app: accepts PDF conversion requests, routes to signed or free SQS queue
+- **signed-worker** — reads signed queue, converts HTML→PDF with WeasyPrint, uploads to S3, saves metadata to RDS
+- **free-worker** — reads free queue, same processing, fixed 1 pod (no autoscaling)
+- **KEDA** — watches signed queue depth, scales signed-worker from 0 to 3 pods
+- **Priority pattern** — signed (paying) users get burst capacity, free users get steady 1-pod throughput
 
-## Repo Structure (planned)
+### Infrastructure (all in us-east-1)
+- **VPC** — 3-tier: public (ALB/NAT), private (EKS nodes), database (RDS)
+- **EKS** — cluster `projectview-dev`, t3.small nodes, min=1 max=3 desired=2
+- **RDS** — PostgreSQL 15, stores PDF job metadata (user, s3_key, status)
+- **SQS** — two queues: `projectview-dev-signed` and `projectview-dev-free`
+- **S3** — private bucket for storing generated PDFs, served via presigned URLs
+- **ECR** — `projectview-app` repository, images tagged by git SHA
+- **Secrets Manager** — DB password + API key (`projectview/api-key`)
+- **IAM roles (IRSA)** — alb-controller, eso, keda, worker
 
+### Addons (installed via Helm in addons Terragrunt module)
+- **ALB Ingress Controller** — creates AWS load balancers from Ingress resources
+- **External Secrets Operator (ESO)** — syncs Secrets Manager into K8s secrets
+- **ArgoCD** — GitOps CD, App of Apps pattern
+- **KEDA** — event-driven autoscaler watching SQS
+
+## Versioning
+Tags follow `vMAJOR.MINOR.PATCH`. Current: `v0.1.0` (Hello World deployed).
+`v1.0.0` = fully working PDF app with CI/CD and GitOps end to end.
+Tell the user when a version is tagged.
+
+## Shutdown / Startup
+
+### Shutdown (end of day — saves ~$160/month)
+```bash
+# 1. Delete test resources if any
+kubectl delete deployment hello
+kubectl delete svc hello
+
+# 2. Destroy all infrastructure
+cd C:\Users\USER\ProjectView-infra\infra\environments\dev
+terragrunt run-all destroy
 ```
-ProjectView/
-├── infra/                  # Terragrunt + Terraform modules
-│   ├── modules/            # Reusable TF modules (eks, vpc, iam, addons)
-│   └── environments/
-│       ├── dev/
-│       └── prod/
-├── gitops/                 # ArgoCD application definitions
-│   ├── apps/               # App of Apps root + child apps
-│   └── argocd/             # ArgoCD install config + RBAC
-├── helm/                   # Generic Helm chart
-│   ├── templates/
-│   └── values/
-│       ├── dev.yaml
-│       ├── staging.yaml
-│       └── production.yaml
-├── app/                    # Sample application (simple web server)
-│   └── Dockerfile
-├── .github/
-│   └── workflows/          # GitHub Actions CI pipeline
-└── README.md
+
+### Startup (next day)
+```bash
+# 1. Rebuild all infrastructure (~40 min)
+cd C:\Users\USER\ProjectView-infra\infra\environments\dev
+terragrunt run-all apply
+
+# 2. Reconnect kubectl
+aws eks update-kubeconfig --region us-east-1 --name projectview-dev
 ```
 
-## Key Decisions
+## Key Decisions (summary)
+- Terragrunt over plain Terraform — DRY config for dev/prod
+- t3.small nodes — cost saving for demo
+- Two SQS queues — priority processing (signed vs free users)
+- KEDA only on signed queue — free worker always 1 pod
+- PDF generation — justifies queue + worker + S3 + DB all at once
+- ECR over GHCR — same AWS account, no extra credentials needed
+- No Route 53 / CloudFront — not needed for demo
+- `wait = false` on Helm releases — avoids timeout on small nodes
+- Always annotate LB services with `service.beta.kubernetes.io/aws-load-balancer-scheme=internet-facing`
 
-- **AWS Region:** us-east-1
-- **Container Registry:** ECR
-- **Terraform module source:** terraform-aws-modules (official community modules)
-- **Cluster naming:** projectview-dev, projectview-prod
-- **AWS Account:** available and ready
+## Working Instructions
+- Explain every CLI command — what it does and why we need it now
+- Teach step by step — the user wants to understand everything
+- Update `documentation.md` after every significant step or decision
+- Update `progress.md` with dates after every completed step
+- Follow branch workflow: issue → branch (`type/description`) → PR → merge → tag if milestone
+- Never push directly to main for app code — always branch + PR
+- Infra hotfixes can go directly to main in ProjectView-infra
+- Tag versions on ProjectView repo only, not infra repo
 
-## Project Phases
-
-### Phase 0 — Bootstrap
-- Verify tools installed: terraform, terragrunt, aws cli, kubectl, helm
-- Create S3 bucket for Terraform remote state
-- Create DynamoDB table for state locking
-- Create ECR repository for Docker images
-- Verify AWS CLI is configured
-
-### Phase 1 — Infrastructure (Terragrunt)
-- Write 4 Terraform modules: `vpc`, `eks`, `iam`, `addons`
-- Write Terragrunt environment configs for dev + prod
-- Deploy order: vpc → eks → iam → addons
-- Dev cluster: t3.medium nodes | Prod cluster: t3.large nodes
-
-### Phase 2 — Sample App + GitHub Actions CI
-- Python Flask app returning `{"status":"ok","env":"...","version":"<git-sha>"}`
-- Multi-stage Dockerfile
-- GitHub Actions: build → lint → push to ECR with git SHA tag → update Helm values
-
-### Phase 3 — Helm Chart
-- Generic chart: Deployment, Service, Ingress, ConfigMap, ExternalSecret templates
-- Per-environment values files: dev.yaml, staging.yaml, production.yaml
-
-### Phase 4 — GitOps (ArgoCD)
-- App of Apps pattern — one root app manages all child apps
-- Promotion flow: CI auto-deploys to dev → manual PR to staging → manual PR to production
-- Rollback: git revert values file → ArgoCD auto-syncs
-
-### Phase 5 — Documentation & Diagram
-- README with setup, decisions, limitations
-- HTML/SVG architecture diagram
-- Keep `documentation.md` updated throughout
-
-## Submission Requirements
-
-- README with setup instructions, assumptions, design decisions, prerequisites, known limitations
-- Architecture diagram (HTML/SVG preferred)
-- Submit at least 1 business day before review session
-
-## instructions to work
-- every command you write me on CLI, write below it what it does. if the command it important write why we need it now.
-- i want to learn! from this project. i need to know everything about it. so we will do it step-step so i can understand.
-- in the file "documentation" write every step we did, and why we did it. split it to infra, bug-fixes, app, workflow, gitops, and another category i you think is neccesary.
-- in the file "progress", mention the progress we done with date and time. make sure to do it.
-
+## AWS Account
+- Account ID: `086241318869`
+- Region: `us-east-1`
+- ECR URI: `086241318869.dkr.ecr.us-east-1.amazonaws.com/projectview-app`
+- State bucket: `projectview-tf-state-086241318869`
+- EKS cluster: `projectview-dev`
