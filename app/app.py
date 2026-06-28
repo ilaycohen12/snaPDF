@@ -8,13 +8,13 @@ from flask import Flask, request, jsonify, render_template_string
 app = Flask(__name__)
 
 SIGNED_QUEUE_URL = os.environ["SIGNED_QUEUE_URL"]
-FREE_QUEUE_URL   = os.environ["FREE_QUEUE_URL"]
-S3_BUCKET        = os.environ["S3_BUCKET"]
-API_KEY          = os.environ["API_KEY"]
-DB_HOST          = os.environ["DB_HOST"]
-DB_NAME          = os.environ.get("DB_NAME", "projectview")
-DB_USER          = os.environ["DB_USER"]
-DB_PASSWORD      = os.environ["DB_PASSWORD"]
+FREE_QUEUE_URL = os.environ["FREE_QUEUE_URL"]
+S3_BUCKET = os.environ["S3_BUCKET"]
+API_KEY = os.environ["API_KEY"]
+DB_HOST = os.environ["DB_HOST"]
+DB_NAME = os.environ.get("DB_NAME", "projectview")
+DB_USER = os.environ["DB_USER"]
+DB_PASSWORD = os.environ["DB_PASSWORD"]
 
 sqs = boto3.client("sqs", region_name="us-east-1")
 s3 = boto3.client("s3", region_name="us-east-1")
