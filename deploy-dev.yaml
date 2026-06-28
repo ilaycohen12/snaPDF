@@ -16,7 +16,7 @@ spec:
       serviceAccountName: pdf-worker-sa
       containers:
       - name: pdf-api
-        image: 086241318869.dkr.ecr.us-east-1.amazonaws.com/projectview-app:latest
+        image: 086241318869.dkr.ecr.us-east-1.amazonaws.com/projectview-app:963cf3c65d8fd100177634db5763cfcd4879dbfa
         ports:
         - containerPort: 5000
         env:
@@ -55,7 +55,7 @@ spec:
       serviceAccountName: pdf-worker-sa
       containers:
       - name: free-worker
-        image: 086241318869.dkr.ecr.us-east-1.amazonaws.com/projectview-app:latest
+        image: 086241318869.dkr.ecr.us-east-1.amazonaws.com/projectview-app:963cf3c65d8fd100177634db5763cfcd4879dbfa
         command: ["python", "worker.py"]
         env:
         - name: QUEUE_URL
@@ -91,7 +91,7 @@ spec:
       serviceAccountName: pdf-worker-sa
       containers:
       - name: signed-worker
-        image: 086241318869.dkr.ecr.us-east-1.amazonaws.com/projectview-app:latest
+        image: 086241318869.dkr.ecr.us-east-1.amazonaws.com/projectview-app:963cf3c65d8fd100177634db5763cfcd4879dbfa
         command: ["python", "worker.py"]
         env:
         - name: QUEUE_URL
