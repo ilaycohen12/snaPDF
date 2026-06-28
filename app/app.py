@@ -17,7 +17,7 @@ DB_USER          = os.environ["DB_USER"]
 DB_PASSWORD      = os.environ["DB_PASSWORD"]
 
 sqs = boto3.client("sqs", region_name="us-east-1")
-s3  = boto3.client("s3",  region_name="us-east-1")
+s3 = boto3.client("s3", region_name="us-east-1")
 
 PAGE = """
 <!DOCTYPE html>
@@ -93,7 +93,8 @@ PAGE = """
       if (!res.ok) { result.textContent = 'Error: ' + json.error; return; }
 
       const tier = json.queue === 'signed' ? 'Signed (priority)' : 'Free';
-      result.innerHTML = `Job submitted — <strong>${tier}</strong> queue<br>ID: <code>${json.job_id}</code><br><br>Checking status...`;
+      result.innerHTML = `Job submitted — <strong>${tier}</strong> queue<br>`
+        + `ID: <code>${json.job_id}</code><br><br>Checking status...`;
       poll(json.job_id);
     });
 
@@ -112,6 +113,7 @@ PAGE = """
 </body>
 </html>
 """
+
 
 def get_db():
     return psycopg2.connect(host=DB_HOST, dbname=DB_NAME, user=DB_USER, password=DB_PASSWORD, sslmode="require")
