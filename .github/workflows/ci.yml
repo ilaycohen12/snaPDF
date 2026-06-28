@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
 
+permissions:
+  id-token: write   # allows the workflow to request an OIDC token from GitHub
+  contents: write   # allows the workflow to push the updated image tag back to the repo
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
