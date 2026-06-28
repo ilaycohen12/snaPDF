@@ -16,22 +16,22 @@ spec:
       serviceAccountName: pdf-worker-sa
       containers:
       - name: pdf-api
-        image: 086241318869.dkr.ecr.us-east-1.amazonaws.com/snapdf-app:963cf3c65d8fd100177634db5763cfcd4879dbfa
+        image: 086241318869.dkr.ecr.us-east-1.amazonaws.com/projectview-app:6eee80fc4fb2f9f01ca3d5b16f7d0b6f4f36a0c5
         ports:
         - containerPort: 5000
         env:
         - name: SIGNED_QUEUE_URL
-          value: "https://sqs.us-east-1.amazonaws.com/086241318869/snapdf-dev-signed"
+          value: "https://sqs.us-east-1.amazonaws.com/086241318869/projectview-dev-signed"
         - name: FREE_QUEUE_URL
-          value: "https://sqs.us-east-1.amazonaws.com/086241318869/snapdf-dev-free"
+          value: "https://sqs.us-east-1.amazonaws.com/086241318869/projectview-dev-free"
         - name: S3_BUCKET
-          value: "snapdf-dev-pdfs-086241318869"
+          value: "projectview-dev-pdfs-086241318869"
         - name: API_KEY
           value: "my-secret-api-key-123"
         - name: DB_HOST
-          value: "snapdf-dev-rds.c8ziggwg07rn.us-east-1.rds.amazonaws.com"
+          value: "projectview-dev-rds.c8ziggwg07rn.us-east-1.rds.amazonaws.com"
         - name: DB_NAME
-          value: "snapdf"
+          value: "projectview"
         - name: DB_USER
           value: "dbadmin"
         - name: DB_PASSWORD
@@ -55,19 +55,19 @@ spec:
       serviceAccountName: pdf-worker-sa
       containers:
       - name: free-worker
-        image: 086241318869.dkr.ecr.us-east-1.amazonaws.com/snapdf-app:963cf3c65d8fd100177634db5763cfcd4879dbfa
+        image: 086241318869.dkr.ecr.us-east-1.amazonaws.com/projectview-app:6eee80fc4fb2f9f01ca3d5b16f7d0b6f4f36a0c5
         command: ["python", "worker.py"]
         env:
         - name: QUEUE_URL
-          value: "https://sqs.us-east-1.amazonaws.com/086241318869/snapdf-dev-free"
+          value: "https://sqs.us-east-1.amazonaws.com/086241318869/projectview-dev-free"
         - name: QUEUE_TYPE
           value: "free"
         - name: S3_BUCKET
-          value: "snapdf-dev-pdfs-086241318869"
+          value: "projectview-dev-pdfs-086241318869"
         - name: DB_HOST
-          value: "snapdf-dev-rds.c8ziggwg07rn.us-east-1.rds.amazonaws.com"
+          value: "projectview-dev-rds.c8ziggwg07rn.us-east-1.rds.amazonaws.com"
         - name: DB_NAME
-          value: "snapdf"
+          value: "projectview"
         - name: DB_USER
           value: "dbadmin"
         - name: DB_PASSWORD
@@ -91,19 +91,19 @@ spec:
       serviceAccountName: pdf-worker-sa
       containers:
       - name: signed-worker
-        image: 086241318869.dkr.ecr.us-east-1.amazonaws.com/snapdf-app:963cf3c65d8fd100177634db5763cfcd4879dbfa
+        image: 086241318869.dkr.ecr.us-east-1.amazonaws.com/projectview-app:6eee80fc4fb2f9f01ca3d5b16f7d0b6f4f36a0c5
         command: ["python", "worker.py"]
         env:
         - name: QUEUE_URL
-          value: "https://sqs.us-east-1.amazonaws.com/086241318869/snapdf-dev-signed"
+          value: "https://sqs.us-east-1.amazonaws.com/086241318869/projectview-dev-signed"
         - name: QUEUE_TYPE
           value: "signed"
         - name: S3_BUCKET
-          value: "snapdf-dev-pdfs-086241318869"
+          value: "projectview-dev-pdfs-086241318869"
         - name: DB_HOST
-          value: "snapdf-dev-rds.c8ziggwg07rn.us-east-1.rds.amazonaws.com"
+          value: "projectview-dev-rds.c8ziggwg07rn.us-east-1.rds.amazonaws.com"
         - name: DB_NAME
-          value: "snapdf"
+          value: "projectview"
         - name: DB_USER
           value: "dbadmin"
         - name: DB_PASSWORD
