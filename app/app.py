@@ -116,13 +116,16 @@ PAGE = """
 def get_db():
     return psycopg2.connect(host=DB_HOST, dbname=DB_NAME, user=DB_USER, password=DB_PASSWORD, sslmode="require")
 
+
 @app.route("/")
 def index():
     return render_template_string(PAGE)
 
+
 @app.route("/health")
 def health():
     return {"status": "ok"}
+
 
 @app.route("/convert", methods=["POST"])
 def convert():
@@ -133,9 +136,9 @@ def convert():
     if not file.filename.endswith(".docx"):
         return jsonify({"error": "only .docx files are supported"}), 400
 
-    api_key   = request.headers.get("X-API-Key", "")
+    api_key = request.headers.get("X-API-Key", "")
     is_signed = api_key == API_KEY
-    job_id    = str(uuid.uuid4())
+    job_id = str(uuid.uuid4())
 
     s3_input_key = f"uploads/{job_id}.docx"
     s3.upload_fileobj(file, S3_BUCKET, s3_input_key)
