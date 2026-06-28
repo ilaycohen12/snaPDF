@@ -45,9 +45,9 @@ Updated throughout the build.
 **Decision:** `signed-worker` and `free-worker` are separate Kubernetes Deployments.
 **Why:** They need different scaling behavior (KEDA vs fixed), different queue URLs as environment variables, and potentially different resource limits in the future. Same Docker image, different config.
 
-### 7. PDF generation as the core feature
-**Decision:** The app converts HTML to PDF using WeasyPrint, stores the result in S3, and saves metadata to RDS.
-**Why:** It's a realistic async workload that justifies a queue, a worker, object storage, and a database all at once. Other ideas (image resize, currency exchange) either required external APIs or didn't naturally involve a database. PDF generation is entirely self-contained.
+### 7. Word-to-PDF conversion using LibreOffice
+**Decision:** The app accepts `.docx` uploads and converts them to PDF using LibreOffice in headless mode (`libreoffice --headless --convert-to pdf`), stores the result in S3, and saves metadata to RDS.
+**Why:** LibreOffice handles real Word files perfectly and runs without a GUI. The alternative (WeasyPrint) only converts HTML — not useful for a document converter. LibreOffice adds ~300MB to the image but is the production-standard approach for `.docx` → PDF.
 
 ### 8. ECR over GitHub Container Registry (GHCR)
 **Decision:** Store Docker images in AWS ECR, not GHCR.
@@ -68,6 +68,10 @@ Updated throughout the build.
 ### 12. Global module for cross-environment resources
 **Decision:** Created an `infra/global/` directory (not inside `environments/dev` or `prod`) for ECR and the API key secret.
 **Why:** ECR is shared — both dev and prod pull images from the same repository. The API key secret is also account-wide. Putting these inside an environment directory would suggest they belong to only that environment.
+
+### 14. Two separate DB tables (signed_jobs + free_jobs)
+**Decision:** Signed users' jobs are stored in `signed_jobs` (includes `username` column), free users' jobs in `free_jobs` (no username).
+**Why:** Different data shapes per user type. Signed jobs carry identity (username) which is meaningful for auditing and per-user history. Free jobs are anonymous. One table with a nullable `username` column would work, but two tables makes the schema intention clear.
 
 ### 13. `recovery_window_in_days = 0` for Secrets Manager
 **Decision:** Set the recovery window to 0 on the API key secret.
@@ -201,6 +205,32 @@ Must apply in this exact order due to dependency chain:
 - **Why:** Before building the full PDF app, we deploy a simple page to verify the entire pipeline works end-to-end: image build → ECR push → EKS deployment → ALB → browser.
 - **Files:** `app/app.py`, `app/requirements.txt`, `app/Dockerfile`
 
+### Full PDF Converter App (Phase 2)
+Three services share one Docker image, started with different commands in Kubernetes:
+
+**API (`app.py`)**
+- `GET /` — web UI with file upload form. User uploads `.docx` + optional API key + username.
+- `POST /convert` — validates API key, uploads `.docx` to S3 (`uploads/<job_id>.docx`), puts a message in the signed or free SQS queue, returns `job_id`.
+- `GET /jobs/<job_id>` — queries RDS for job status. If done, returns a presigned S3 URL (expires in 1 hour) to download the PDF.
+
+**Worker (`worker.py`)**
+- Same code for both signed and free workers — controlled by `QUEUE_TYPE` env var.
+- On startup: creates `signed_jobs` and `free_jobs` tables in RDS if they don't exist.
+- Loop: polls SQS (long polling, 20s wait), downloads `.docx` from S3, runs LibreOffice to convert, uploads PDF to S3 (`outputs/<job_id>.pdf`), updates job row to `done`, deletes SQS message.
+- On failure: marks job as `failed` in DB, still deletes the SQS message (no infinite retry).
+
+**Dockerfile (multi-stage)**
+- Stage 1 (builder): installs Python packages into `/install` prefix.
+- Stage 2 (runtime): installs LibreOffice via apt, copies Python packages from builder, copies `app.py` and `worker.py`. Default CMD starts the API.
+
+**DB Tables**
+- `free_jobs`: `job_id`, `s3_key`, `status`, `created_at`
+- `signed_jobs`: `job_id`, `username`, `s3_key`, `status`, `created_at`
+
+**Manual deploy (temporary)**
+- Used `kubectl apply` with a raw Deployment + LoadBalancer Service to verify the app works before Helm/ArgoCD is set up.
+- File: `deploy-dev.yaml` in the repo root (not committed — temporary).
+
 ---
 
 ## CI/CD Workflow
@@ -268,6 +298,36 @@ Must apply in this exact order due to dependency chain:
 - **Cause:** When you create a `type: LoadBalancer` service in EKS, the ALB controller defaults to `internal` scheme — meaning the load balancer is only reachable from inside the VPC, not from the internet.
 - **Fix:** Added the annotation `service.beta.kubernetes.io/aws-load-balancer-scheme=internet-facing` to the service. Annotations are key-value metadata on Kubernetes resources that tools like the ALB controller read to change their behavior. The public subnets already had the `kubernetes.io/role/elb=1` tag so the controller knew which subnets to use for the public-facing LB.
 - **Lesson:** Always annotate LoadBalancer services with the scheme explicitly — never rely on the default.
+
+### Bug 11 — Pod using node IAM role instead of worker role (AccessDenied on S3)
+- **Error:** `AccessDenied` when calling `s3:PutObject` — the assumed role was `projectview-dev-nodes-eks-node-group-...` (the EC2 node role), not the worker role.
+- **Cause:** When a pod runs without a ServiceAccount annotated with an IAM role, it falls back to the IAM role of the EC2 node it's running on. The node role only has permissions to join the cluster and pull images — no S3 or SQS access.
+- **Fix:** Created a Kubernetes ServiceAccount (`pdf-worker-sa`) in the `dev` namespace annotated with `eks.amazonaws.com/role-arn: arn:aws:iam::086241318869:role/projectview-dev-worker`. Updated the Deployment to use `serviceAccountName: pdf-worker-sa`. AWS then injects temporary credentials for the worker role into the pod via a projected token volume.
+- **Lesson:** Always attach a ServiceAccount with the correct IAM role to every pod that needs AWS access. Never rely on the node role for application-level permissions — it violates least-privilege and gives every pod on that node the same access.
+
+### Bug 12 — Wrong ServiceAccount name in IAM trust policy
+- **Error:** `AccessDenied` on `sts:AssumeRoleWithWebIdentity`
+- **Cause:** The IAM trust policy for the worker role was locked to `system:serviceaccount:default:worker`. Our ServiceAccount was named `pdf-worker-sa` in the `dev` namespace. The two didn't match so AWS refused to issue credentials.
+- **Fix:** Updated the trust policy in `infra/modules/iam/main.tf` to `system:serviceaccount:dev:pdf-worker-sa` and re-applied the IAM module.
+- **Lesson:** The trust policy on an IRSA role must exactly match the namespace AND name of the Kubernetes ServiceAccount. One character off = access denied.
+
+### Bug 13 — Missing `sqs:SendMessage` permission
+- **Error:** `AccessDenied` on `sqs:SendMessage`
+- **Cause:** The worker IAM policy had `sqs:ReceiveMessage`, `sqs:DeleteMessage`, and `sqs:GetQueueAttributes` but we forgot `sqs:SendMessage` — the permission the API needs to put messages into the queue.
+- **Fix:** Added `sqs:SendMessage` to the worker policy in `infra/modules/iam/main.tf` and re-applied.
+- **Lesson:** IAM permissions are discovered one at a time as each line of code runs. Always think through every AWS API call the app makes and map it to a permission.
+
+### Bug 14 — RDS rejecting non-SSL connections
+- **Error:** `FATAL: no pg_hba.conf entry for host ... no encryption`
+- **Cause:** AWS RDS PostgreSQL enforces SSL connections by default. psycopg2 was connecting without SSL — RDS rejected it at the TCP handshake level before even checking the password.
+- **Fix:** Added `sslmode="require"` to the `psycopg2.connect()` call in both `app.py` and `worker.py`.
+- **Lesson:** Always use SSL when connecting to RDS. In production this would be enforced by a parameter group — in code, always pass `sslmode="require"`.
+
+### Bug 15 — Wrong DB password (missing character)
+- **Error:** `FATAL: password authentication failed for user "dbadmin"`
+- **Cause:** When we copied the RDS password from Secrets Manager output, the last character (`t`) was cut off. The password in `deploy-dev.yaml` was `...Y(` instead of `...Y(t`.
+- **Fix:** Re-fetched the password from Secrets Manager, spotted the missing character, updated `deploy-dev.yaml`.
+- **Lesson:** This is exactly why we use External Secrets Operator — ESO pulls the latest secret value from Secrets Manager automatically. Hardcoding secrets in YAML means any rotation or typo breaks the app and requires a manual fix.
 
 ### Bug 5 — IAM applied before SQS and S3
 - **Error:** `Unknown variable` on `dependency.sqs.outputs.signed_queue_arn` in `dev/iam/terragrunt.hcl`

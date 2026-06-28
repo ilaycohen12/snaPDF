@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::086241318869:role/github-actions-ci
+          aws-region: us-east-1
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Lint
+        run: |
+          pip install flake8
+          flake8 app/ --max-line-length=120
+
+      - name: Build and push image
+        run: |
+          IMAGE=086241318869.dkr.ecr.us-east-1.amazonaws.com/projectview-app
+          SHA=${{ github.sha }}
+          docker build -t $IMAGE:$SHA -t $IMAGE:latest ./app
+          docker push $IMAGE:$SHA
+          docker push $IMAGE:latest
+          echo "IMAGE_TAG=$SHA" >> $GITHUB_ENV
+
+      - name: Update image tag in deploy file
+        run: |
+          sed -i "s|projectview-app:.*|projectview-app:${{ github.sha }}|g" deploy-dev.yaml
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add deploy-dev.yaml
+          git commit -m "ci: update image tag to ${{ github.sha }}"
+          git push
+
+      - name: Rollout restart
+        run: |
+          aws eks update-kubeconfig --region us-east-1 --name projectview-dev
+          kubectl rollout restart deployment/pdf-api deployment/free-worker deployment/signed-worker -n dev
+          kubectl rollout status deployment/pdf-api -n dev --timeout=120s
