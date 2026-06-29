@@ -36,16 +36,27 @@ We set up everything needed before touching any real infrastructure. Installed a
 - [x] Step 6 — Build + push full app image to ECR, verify in browser ✅ 28/06/2026
 - [x] Step 7 — Write GitHub Actions CI pipeline (build → lint → push to ECR → update image tag) ✅ 28/06/2026
 
-## Phase 3 — Helm Chart
-- [ ] Step 1 — Write generic Helm chart (Deployment, Service, Ingress, ConfigMap, ExternalSecret, ScaledObject)
-- [ ] Step 2 — Write worker Helm chart (signed worker with ScaledObject, free worker fixed)
-- [ ] Step 3 — Write per-environment values: dev.yaml, staging.yaml, production.yaml
+## Phase 3 — Helm Chart + CI Restructure
+- [x] Step 1 — Create snaPDF-gitops repo with charts/service Helm chart structure ✅ 29/06/2026
+- [x] Step 2 — Write all 6 Helm chart templates (deployment, service, ingress-nginx, scaledobject, hpa, externalsecret) ✅ 29/06/2026
+- [x] Step 3 — Write per-environment values files (dev, staging, prod) for all services ✅ 29/06/2026
+- [x] Step 4 — Split app into separate microservice directories (api/, worker/, auth/) ✅ 29/06/2026
+- [x] Step 5 — Create 3 separate ECR repos (snapdf-api, snapdf-worker, snapdf-auth) ✅ 29/06/2026
+- [x] Step 6 — Write 3 separate CI workflows with unit tests, one per service ✅ 29/06/2026
+- [x] Step 7 — Add branch-based environment promotion (main→dev, staging→staging, prod→prod) ✅ 29/06/2026
+- [x] Step 8 — Fix destroy script — handle LBs, ENIs, security groups, subnets, --lock=false ✅ 30/06/2026
 
 ## Phase 4 — GitOps (ArgoCD)
-- [ ] Step 1 — Set up App of Apps pattern
-- [ ] Step 2 — Configure promotion flow (dev → staging → production)
-- [ ] Step 3 — Configure ESO ClusterSecretStore and ExternalSecret (DB password + API key)
-- [ ] Step 4 — Configure RBAC per environment
+- [ ] Step 1 — Add Nginx Ingress Controller to Terraform addons module
+- [ ] Step 2 — Apply infra addons (Nginx installed on cluster)
+- [ ] Step 3 — Write apps/nginx-app.yaml — ArgoCD Application for Nginx
+- [ ] Step 4 — Write apps/eso-appset.yaml — ApplicationSet for ExternalSecrets
+- [ ] Step 5 — Write apps/services-appset.yaml — ApplicationSet generating one app per service per env
+- [ ] Step 6 — Apply infra (terragrunt run-all apply) to rebuild dev environment
+- [ ] Step 7 — Create root ArgoCD Application (one-time kubectl apply) pointing at apps/ folder
+- [ ] Step 8 — Configure ArgoCD webhook — instant sync on gitops repo push
+- [ ] Step 9 — Configure ESO ClusterSecretStore
+- [ ] Step 10 — Verify full GitOps flow end to end
 
 ## Phase 5 — Documentation & Diagram
 - [x] Step 1 — Create architecture diagram (HTML) ✅ 26/06/2026

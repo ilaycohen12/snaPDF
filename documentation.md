@@ -569,6 +569,21 @@ No manual `kubectl` in production. Git is the single source of truth.
 - **Fix:** Updated the trust policy in `infra/modules/iam/main.tf` to `system:serviceaccount:dev:pdf-worker-sa` and re-applied the IAM module.
 - **Lesson:** The trust policy on an IRSA role must exactly match the namespace AND name of the Kubernetes ServiceAccount. One character off = access denied.
 
+### Bug 13 — `terragrunt run-all destroy` fails repeatedly on VPC deletion
+- **Root causes (multiple, each required a separate fix):**
+  1. **ENIs blocking subnet deletion** — The ALB controller and ArgoCD create AWS load balancers when services are deployed. When the EKS cluster is destroyed, those load balancers and their network interfaces (ENIs) remain in the VPC subnets. Terraform cannot delete subnets with active ENIs.
+  2. **Leftover security groups** — EKS and the ALB controller create security groups inside the VPC that Terraform doesn't manage. These block VPC deletion.
+  3. **DNS failure mid-destroy** — After a long destroy run (~20 min), Windows temporarily loses DNS resolution at the VPC deletion stage, causing `no such host` errors on EC2 API calls. This also left stuck state locks.
+  4. **State lock stuck after crash** — When DNS fails, Terraform cannot release the state lock it holds, so the next run errors with "state already locked".
+- **Fix:** Replaced the manual `terragrunt run-all destroy` command with `destroy.ps1` which runs these steps before Terraform touches the VPC:
+  1. Delete all Kubernetes services and ingresses in every namespace (triggers ALB controller to delete AWS load balancers)
+  2. Poll until all load balancers in the VPC are actually gone
+  3. Detach and delete all ENIs in the VPC
+  4. Delete all non-default security groups in the VPC
+  5. Delete all subnets manually
+  6. Run `terragrunt run-all destroy --lock=false` (`--lock=false` prevents stuck locks if DNS fails again)
+- **Usage:** Always use `.\destroy.ps1` from the repo root instead of running terragrunt directly. Pass `-SkipK8s` if the cluster is already gone.
+
 ### Bug 13 — Missing `sqs:SendMessage` permission
 - **Error:** `AccessDenied` on `sqs:SendMessage`
 - **Cause:** The worker IAM policy had `sqs:ReceiveMessage`, `sqs:DeleteMessage`, and `sqs:GetQueueAttributes` but we forgot `sqs:SendMessage` — the permission the API needs to put messages into the queue.
