@@ -316,20 +316,51 @@ CI's job ends at the git push. ArgoCD takes over from there. This separation mea
 
 #### How environments work
 
-The same workflow file handles all three environments (dev, staging, prod) by checking which branch triggered it:
+The repo has three long-lived branches, one per environment:
+```
+main     → dev environment
+staging  → staging environment
+prod     → prod environment
+```
 
+The same workflow file handles all three environments by checking which branch triggered it:
 ```
 Push to main    → workflow runs → updates environments/dev/api-values.yaml
 Push to staging → workflow runs → updates environments/staging/api-values.yaml
 Push to prod    → workflow runs → updates environments/prod/api-values.yaml
 ```
 
-**Promotion flow:**
-1. Developer pushes code to `main` → automatically deploys to dev
-2. When dev is verified, merge `main` into `staging` → automatically deploys to staging
-3. When staging is verified, merge `staging` into `prod` → ArgoCD shows out-of-sync, someone clicks Sync in the UI → deploys to prod
+**Day to day — you only touch `main`:**
+Write code, push to `main`, CI runs, dev gets updated automatically. You never write code directly to `staging` or `prod`.
 
-Prod never deploys automatically — a human must approve it in the ArgoCD UI.
+**Promoting to staging:**
+When dev is verified and you want to move the same code to staging, you merge `main` into `staging`:
+```bash
+git checkout staging
+git merge main
+git push origin staging
+```
+CI triggers on the `staging` branch, updates `environments/staging/api-values.yaml`, ArgoCD deploys to staging automatically.
+
+**Promoting to prod:**
+When staging is verified, merge `staging` into `prod`:
+```bash
+git checkout prod
+git merge staging
+git push origin prod
+```
+CI triggers, updates `environments/prod/api-values.yaml`. ArgoCD sees the change but does **not deploy automatically** — someone must click Sync in the ArgoCD UI to approve the production deployment.
+
+**The full promotion flow:**
+```
+write code → push to main → dev ✅
+                ↓
+         git merge main → staging → staging ✅
+                ↓
+         git merge staging → prod → prod (manual approval in ArgoCD UI)
+```
+
+You never skip a step — prod always has exactly what staging had, staging always has exactly what dev had. This means if something works in staging, you know with confidence it will work in prod.
 
 #### Unit tests
 

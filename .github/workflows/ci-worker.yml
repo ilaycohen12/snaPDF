@@ -2,7 +2,7 @@ name: CI - worker
 
 on:
   push:
-    branches: [main]
+    branches: [main, staging, prod]
     paths:
       - 'worker/**'
 
@@ -46,12 +46,17 @@ jobs:
 
       - name: Update image tag in gitops repo
         run: |
+          BRANCH=${{ github.ref_name }}
+          if [ "$BRANCH" = "main" ]; then ENV="dev"
+          elif [ "$BRANCH" = "staging" ]; then ENV="staging"
+          else ENV="prod"
+          fi
           git clone https://x-access-token:${{ secrets.GITOPS_TOKEN }}@github.com/ilaycohen12/snaPDF-gitops.git
           cd snaPDF-gitops
-          sed -i "s|tag:.*|tag: ${{ github.sha }}|g" environments/dev/free-worker-values.yaml
-          sed -i "s|tag:.*|tag: ${{ github.sha }}|g" environments/dev/signed-worker-values.yaml
+          sed -i "s|tag:.*|tag: ${{ github.sha }}|g" environments/$ENV/free-worker-values.yaml
+          sed -i "s|tag:.*|tag: ${{ github.sha }}|g" environments/$ENV/signed-worker-values.yaml
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add environments/dev/free-worker-values.yaml environments/dev/signed-worker-values.yaml
-          git commit -m "ci: update worker image tag to ${{ github.sha }}"
+          git add environments/$ENV/free-worker-values.yaml environments/$ENV/signed-worker-values.yaml
+          git commit -m "ci: update worker image tag to ${{ github.sha }} ($ENV)"
           git push
