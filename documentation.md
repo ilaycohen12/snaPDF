@@ -73,6 +73,18 @@ Updated throughout the build.
 **Decision:** Signed users' jobs are stored in `signed_jobs` (includes `username` column), free users' jobs in `free_jobs` (no username).
 **Why:** Different data shapes per user type. Signed jobs carry identity (username) which is meaningful for auditing and per-user history. Free jobs are anonymous. One table with a nullable `username` column would work, but two tables makes the schema intention clear.
 
+### 15. Two-layer ingress: ALB + Nginx
+**Decision:** Use AWS ALB (via ALB Controller) at the edge and Nginx Ingress Controller inside the cluster.
+**Why:** ALB handles AWS-level concerns (SSL termination, WAF, DDoS). Nginx handles cluster-level routing (path rules, rate limiting, rewrites). One shared ALB serves all HTTP services — cheaper than one LoadBalancer per service. Workers are never exposed over HTTP.
+
+### 16. One generic Helm chart for all services
+**Decision:** One chart at `charts/service/` reused for api, workers, and auth. Features toggled via values.
+**Why:** Avoids duplicating Deployment/Service/Ingress templates per service. All services share the same structure — only the values differ. Adding a new service = add a values file, no new chart needed.
+
+### 17. ApplicationSet over App of Apps
+**Decision:** Use ArgoCD ApplicationSet to generate apps per service per environment.
+**Why:** App of Apps requires manually writing one Application YAML per service. ApplicationSet generates them from a template automatically — adding a new service or environment means adding one values file, not touching the ArgoCD config.
+
 ### 13. `recovery_window_in_days = 0` for Secrets Manager
 **Decision:** Set the recovery window to 0 on the API key secret.
 **Why:** By default AWS holds deleted secrets for 30 days (recovery period). With Terraform, if you run `destroy` you want the secret gone immediately — otherwise the next `apply` fails because a secret with that name already "exists" in recovery. Setting `0` allows immediate deletion.
@@ -271,7 +283,102 @@ The "Update image tag" step will edit `values-dev.yaml` in the gitops repo inste
 
 ## GitOps
 
-> To be documented when ArgoCD App of Apps is configured.
+### Three-Repo Architecture
+The project is split across three Git repositories, each with a clear owner:
+
+| Repo | Owner | Contains |
+|------|-------|----------|
+| `snaPDF` | Developers | App code, Dockerfile, CI pipeline |
+| `snaPDF-infra` | Platform team | Terraform modules, Terragrunt configs |
+| `snaPDF-gitops` | ArgoCD | Helm charts, environment values, ArgoCD apps |
+
+This separation is intentional. App developers should never need to touch infra. ArgoCD only watches the gitops repo — so it can't accidentally deploy untested code from the app repo.
+
+### Traffic Flow — Two-Layer Ingress (ALB + Nginx)
+```
+Internet
+    ↓
+AWS ALB  ← created by ALB Controller from an Ingress resource
+    ↓         (handles SSL termination, AWS WAF, DDoS protection)
+Nginx pod ← runs inside the cluster, installed via ArgoCD
+    ↓         (handles path-based routing, rate limiting, rewrites)
+api-service or auth-service
+```
+
+**Why two layers:**
+- The ALB (AWS-native) is the internet-facing entry point. It handles SSL, WAF rules, and AWS Shield — things that need to happen at the AWS level before traffic enters the cluster.
+- Nginx (cluster-native) handles smart routing: `/api/*` → api pods, `/auth/*` → auth pods. ALB alone can do path routing, but Nginx gives more control (rate limiting, header rewriting, auth delegation) without AWS vendor lock-in on routing rules.
+- Workers (free-worker, signed-worker) are never exposed — they only listen to SQS queues, not HTTP.
+
+**Why ALB controller is in Terraform (not ArgoCD):**
+The ALB controller must exist before anything else can get internet traffic. ArgoCD itself might need network access to start. Installing infra-level prerequisites via ArgoCD creates a chicken-and-egg problem. Rule: if it needs to exist before the cluster can do anything, Terraform owns it.
+
+### gitops Repo Structure
+```
+snaPDF-gitops/
+├── apps/
+│   ├── services-appset.yaml   ← generates one ArgoCD app per service per env
+│   ├── eso-appset.yaml        ← generates ExternalSecret resources per env
+│   └── nginx-app.yaml         ← installs Nginx Ingress Controller
+├── charts/
+│   └── service/               ← one generic chart reused for api, workers, auth
+│       ├── Chart.yaml
+│       ├── values.yaml        ← defaults
+│       └── templates/
+│           ├── deployment.yaml
+│           ├── service.yaml
+│           ├── ingress-nginx.yaml   ← if ingress.enabled=true (api, auth only)
+│           ├── scaledobject.yaml    ← if keda.enabled=true (signed-worker only)
+│           ├── hpa.yaml             ← if hpa.enabled=true (api only)
+│           └── externalsecret.yaml  ← if eso.enabled=true
+└── environments/
+    ├── dev/
+    │   ├── api-values.yaml
+    │   ├── free-worker-values.yaml
+    │   └── signed-worker-values.yaml
+    └── prod/
+        └── (same structure)
+```
+
+### One Generic Helm Chart
+All services (api, free-worker, signed-worker, auth) use the same chart at `charts/service/`. Each service gets its own values file in `environments/{env}/`. Features are toggled on/off per service:
+
+| Feature | api | free-worker | signed-worker | auth |
+|---------|-----|-------------|---------------|------|
+| Ingress (Nginx) | ✅ | ❌ | ❌ | ✅ |
+| HPA (CPU scaling) | ✅ | ❌ | ❌ | ✅ |
+| KEDA (SQS scaling) | ❌ | ❌ | ✅ | ❌ |
+| ExternalSecret (ESO) | ✅ | ✅ | ✅ | ✅ |
+
+### ApplicationSet vs App of Apps
+We use **ApplicationSet** (not App of Apps). The difference:
+- **App of Apps** — one parent ArgoCD Application points to a folder of other Application YAMLs. Simple but static.
+- **ApplicationSet** — generates ArgoCD Applications dynamically from a template + a list of inputs (e.g. environments × services). One ApplicationSet generates 6 apps (3 services × 2 envs) automatically.
+
+`services-appset.yaml` generates one ArgoCD Application per service per environment, each pointing at `charts/service/` with the correct values file from `environments/{env}/{service}-values.yaml`.
+
+### ESO Resources in gitops
+The ESO **controller** lives in Terraform (addon). The ESO **resources** live in the gitops repo:
+- `ClusterSecretStore` — tells ESO how to connect to AWS Secrets Manager (which region, which IAM role)
+- `ExternalSecret` — tells ESO which secret to fetch and what to name the resulting Kubernetes Secret
+
+These are app-level config (not infra), so ArgoCD manages them. `eso-appset.yaml` generates ExternalSecret resources per environment.
+
+### GitOps Deployment Flow (Phase 4 target)
+```
+Developer pushes code to snaPDF repo
+    ↓
+GitHub Actions CI: lint → build → push image to ECR
+    ↓
+CI updates image tag in snaPDF-gitops/environments/dev/api-values.yaml
+    ↓
+ArgoCD detects git change in snaPDF-gitops
+    ↓
+ArgoCD runs helm upgrade with new values
+    ↓
+New pods roll out in dev cluster
+```
+No manual `kubectl` in production. Git is the single source of truth.
 
 ---
 
