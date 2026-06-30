@@ -48,15 +48,18 @@ We set up everything needed before touching any real infrastructure. Installed a
 
 ## Phase 4 — GitOps (ArgoCD)
 - [ ] Step 1 — Add Nginx Ingress Controller to Terraform addons module
-- [ ] Step 2 — Apply infra addons (Nginx installed on cluster)
-- [ ] Step 3 — Write apps/nginx-app.yaml — ArgoCD Application for Nginx
-- [ ] Step 4 — Write apps/eso-appset.yaml — ApplicationSet for ExternalSecrets
-- [ ] Step 5 — Write apps/services-appset.yaml — ApplicationSet generating one app per service per env
-- [ ] Step 6 — Apply infra (terragrunt run-all apply) to rebuild dev environment
-- [ ] Step 7 — Create root ArgoCD Application (one-time kubectl apply) pointing at apps/ folder
-- [ ] Step 8 — Configure ArgoCD webhook — instant sync on gitops repo push
-- [ ] Step 9 — Configure ESO ClusterSecretStore
-- [ ] Step 10 — Verify full GitOps flow end to end
+- [ ] Step 2 — Delete apps/nginx-app.yaml from snaPDF-gitops (Nginx moved to Terraform)
+- [ ] Step 3 — Fill in apps/eso-appset.yaml — ApplicationSet deploying ClusterSecretStore per cluster
+- [ ] Step 4 — Fill in apps/services-appset.yaml — ApplicationSet generating one app per service per env
+- [ ] Step 5 — Write infra/bootstrap/root-app.yaml in snaPDF-infra — root ArgoCD Application pointing at snaPDF-gitops/apps/
+- [ ] Step 6 — Apply dev infra: terragrunt run-all apply in environments/dev
+- [ ] Step 7 — Reconnect kubectl to dev: aws eks update-kubeconfig --region us-east-1 --name snapdf-dev
+- [ ] Step 8 — Apply root app: kubectl apply -f infra/bootstrap/root-app.yaml (one-time bootstrap)
+- [ ] Step 9 — Apply prod infra: terragrunt run-all apply in environments/prod
+- [ ] Step 10 — Reconnect kubectl to prod: aws eks update-kubeconfig --region us-east-1 --name snapdf-prod
+- [ ] Step 11 — Register prod cluster with ArgoCD: argocd cluster add
+- [ ] Step 12 — Configure ArgoCD webhook — instant sync on snaPDF-gitops push
+- [ ] Step 13 — Verify full GitOps flow end to end
 
 ## Phase 5 — Documentation & Diagram
 - [x] Step 1 — Create architecture diagram (HTML) ✅ 26/06/2026

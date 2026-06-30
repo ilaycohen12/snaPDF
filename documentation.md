@@ -485,6 +485,108 @@ The ESO **controller** lives in Terraform (addon). The ESO **resources** live in
 
 These are app-level config (not infra), so ArgoCD manages them. `eso-appset.yaml` generates ExternalSecret resources per environment.
 
+### Phase 4 Design Decisions
+
+#### Where does the root ArgoCD Application live?
+The root Application is the one-time bootstrap that tells ArgoCD "watch the `apps/` folder in snaPDF-gitops and deploy everything you find there." It lives in **snaPDF-infra** (`bootstrap/root-app.yaml`), not in the gitops repo.
+
+Why: if it lived in the gitops repo, ArgoCD would need to be watching the gitops repo before it could read the file that tells it to watch the gitops repo — a chicken-and-egg problem. The infra repo is where we bootstrap the cluster; the root Application is part of that bootstrap. It is applied once with `kubectl apply -f bootstrap/root-app.yaml` after `terragrunt apply`.
+
+#### ApplicationSet vs Application — which files use which?
+| File | Kind | Why |
+|---|---|---|
+| `nginx-app.yaml` | `Application` | One Nginx install, one cluster — no generation needed |
+| `eso-appset.yaml` | `ApplicationSet` | One ClusterSecretStore needed per cluster (dev + prod) — generator stamps it out for each |
+| `services-appset.yaml` | `ApplicationSet` | One app per service per environment — generator produces all combinations |
+
+An **Application** is a single ArgoCD deployment. An **ApplicationSet** generates multiple Applications from a template using a generator (list, git directory, cluster, etc.).
+
+#### Single ArgoCD instance vs one per cluster
+We run **one shared ArgoCD instance** on the dev cluster that manages both dev and prod.
+
+- **Single instance (our choice):** One ArgoCD installation on dev. Prod cluster is registered as a remote destination. One UI, one set of ApplicationSets, less operational overhead. The ApplicationSet list generator can target both clusters from one place. Standard choice for small teams and demos.
+- **One per cluster:** Each cluster runs its own ArgoCD. More isolation — prod ArgoCD going down doesn't affect dev. Required in regulated industries (finance, healthcare) where the dev cluster must not hold credentials for prod. Higher operational cost.
+
+For an interview assessment, single instance is the right call — it directly demonstrates the multi-cluster ApplicationSet pattern, which is more impressive than two isolated installs.
+
+#### Where should cluster addons live — Terraform or ArgoCD?
+
+**Option A — All addons in Terraform (ALB controller, ESO, KEDA, Nginx, ArgoCD)**
+Terraform installs everything cluster-level. ArgoCD manages only the application services. Clean rule: *Terraform owns the cluster, ArgoCD owns the apps.*
+
+**Option B — Terraform installs ArgoCD only, ArgoCD manages everything else**
+Pure GitOps — every addon change goes through a git push + ArgoCD sync. Nginx, ESO, KEDA are ArgoCD Applications in the gitops repo.
+
+**The problem with Option B:** ALB controller, ESO, and KEDA all need an IAM role ARN injected at install time (via IRSA annotation on their service account). Those ARNs come from Terraform's IAM module outputs. ArgoCD has no way to read Terraform outputs — creating a dependency: Terraform knows the ARN, ArgoCD needs it, but they don't talk to each other.
+
+**How to solve Option B if you want it:** The ARNs in this project are deterministic — we know the account ID (`086241318869`) and the role naming convention (`snapdf-dev-<name>`). So the full ARN for ESO is always `arn:aws:iam::086241318869:role/snapdf-dev-eso`. You can hardcode these in the gitops values files without fragility — they only change if you rename the roles or switch accounts, both of which require intentional changes anyway.
+
+**Decision:** Option A — keep all addons in Terraform, ArgoCD manages only app services. Consistent, simpler, and easy to explain. A hybrid (some addons in Terraform, some in ArgoCD) would be inconsistent with no clean rule for what goes where.
+
+---
+
+### Root ArgoCD Application (`infra/bootstrap/root-app.yaml`)
+
+The root Application is the one-time bootstrap that starts the entire GitOps chain. Applied once with `kubectl apply` after the cluster is up — never touched again.
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ilaycohen12/snaPDF-gitops.git
+    targetRevision: HEAD
+    path: apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+```
+
+| Field | What it does |
+|---|---|
+| `kind: Application` | Single Application — not an ApplicationSet. One root that spawns everything else |
+| `name: root` | The name shown in the ArgoCD UI |
+| `namespace: argocd` | This Application object lives in the argocd namespace, where ArgoCD looks for things to manage |
+| `finalizers` | When you delete the root app, ArgoCD cascades the deletion to all child apps. Without this, deleting root leaves all child ApplicationSets as orphans |
+| `path: apps` | Points at the `apps/` folder in snaPDF-gitops — ArgoCD finds `eso-appset.yaml` and `services-appset.yaml` there and deploys them |
+| `destination.server` | Deploy the Application objects themselves to the local cluster where ArgoCD is running |
+| `destination.namespace: argocd` | The ApplicationSets get created in the argocd namespace |
+| `syncPolicy: automated` | ArgoCD watches `apps/` and syncs automatically on every push |
+
+### services-appset.yaml — Git Directory Generator
+
+Uses two Git generators (not a list) so services are discovered automatically from the folder structure. Adding a new service = create a new folder, no YAML editing needed.
+
+- **Generator 1** — discovers `environments/dev/*` and `environments/staging/*`, sets destination server to `https://kubernetes.default.svc` (dev cluster, in-cluster)
+- **Generator 2** — discovers `environments/prod/*`, sets destination server to the prod cluster endpoint
+
+ArgoCD path variables extracted from the folder path `environments/{env}/{service}`:
+- `{{path.basename}}` → service name (e.g. `api`, `signed-worker`)
+- `{{path[1]}}` → environment name (e.g. `dev`, `prod`) — used as both the namespace and app name suffix
+- `{{path}}` → full path used to build the values file reference: `/{{path}}/values.yaml`
+
+Generated app names follow the pattern `{service}-{env}` (e.g. `api-dev`, `signed-worker-prod`). 12 Applications total: 4 services × 3 environments.
+
+### eso-appset.yaml — ClusterSecretStore per Cluster
+
+Uses the `clusters: {}` generator which automatically targets every cluster registered in ArgoCD. When the prod cluster is registered in Step 11, ArgoCD deploys the ClusterSecretStore to prod automatically — no config change needed.
+
+The ClusterSecretStore (`bootstrap/eso/clustersecretstore.yaml`) tells ESO:
+- Use AWS Secrets Manager in `us-east-1`
+- Authenticate using the `external-secrets` ServiceAccount (which has the IRSA annotation with the ESO IAM role)
+
+ESO's own pods handle the AWS authentication — app pods never call Secrets Manager directly. They just read the Kubernetes Secret that ESO created.
+
 ### GitOps Deployment Flow (Phase 4 target)
 ```
 Developer pushes code to snaPDF repo
