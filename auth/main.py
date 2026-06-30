@@ -38,11 +38,12 @@ def init_db():
     conn.close()
 
 
-LOGIN_PAGE = """
+LOGIN_PAGE = “””
 <!DOCTYPE html>
 <html>
 <head>
-  <title>snaPDF ג€” Sign In</title>
+  <meta charset=”UTF-8”>
+  <title>snaPDF &mdash; Sign In</title>
   <style>
     * { box-sizing: border-box; }
     body { font-family: sans-serif; max-width: 400px; margin: 100px auto; padding: 0 24px; color: #222; }
@@ -68,8 +69,8 @@ LOGIN_PAGE = """
     <button type="submit">Sign In</button>
   </form>
   <p class="links">
-    <a href="/auth/signup">Create an account ג†’</a>
-    &nbsp;ֲ·&nbsp;
+    <a href="/auth/signup">Create an account &rarr;</a>
+    &nbsp;&middot;&nbsp;
     <a href="{{ api_url }}">Use free tier</a>
   </p>
 </body>
@@ -80,7 +81,8 @@ SIGNUP_PAGE = """
 <!DOCTYPE html>
 <html>
 <head>
-  <title>snaPDF ג€” Create Account</title>
+  <meta charset=”UTF-8”>
+  <title>snaPDF &mdash; Create Account</title>
   <style>
     * { box-sizing: border-box; }
     body { font-family: sans-serif; max-width: 400px; margin: 100px auto; padding: 0 24px; color: #222; }
