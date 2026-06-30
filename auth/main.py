@@ -184,7 +184,7 @@ def _issue_jwt_redirect(username):
         JWT_SECRET,
         algorithm="HS256",
     )
-    return redirect(f"{API_URL}"token={token}")
+    return redirect(f"{API_URL}?token={token}")
 
 
 @app.route("/verify", methods=["POST"])
