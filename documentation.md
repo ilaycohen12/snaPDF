@@ -945,6 +945,15 @@ Dev/staging numbers stay conservative since both share the same 2×t3.medium dev
 
 **Related gaps noticed while doing this (not yet fixed, filed separately):** `environments/production/auth/values.yaml` has no `serviceAccount.roleArn` set at all (would deploy with zero IAM permissions), and `environments/production/signed-worker/values.yaml` has no `queueURL` set (would hit the exact same broken-KEDA-auth failure as Bug 24, since KEDA can't watch an empty queue URL). Both would only surface once prod is actually applied — worth checking before that happens.
 
+### Production values files completed — except secrets (01/07/2026)
+While adding resource limits, noticed all 4 `environments/production/*/values.yaml` files were effectively empty stubs: `env: {}`, `eso: enabled: true` with no `secrets:` list, `auth` missing `serviceAccount.roleArn` entirely, `signed-worker` missing `queueURL`. Left as-is, every prod pod would crash-loop immediately on the first required env var lookup (`os.environ["DB_HOST"]` etc.) — `env: {}` and empty `eso.secrets` together meant *both* guards in `deployment.yaml`'s `envFrom` (`gt (len .Values.env) 0` and `and .Values.eso.enabled (gt (len .Values.eso.secrets) 0)`) were false, so nothing at all would have been injected.
+
+**Fixed now** (deterministic, doesn't depend on prod existing yet): `env:` vars (DB_NAME, SQS queue URLs, S3 bucket — all follow the same `${cluster_name}-*` naming Terraform will create), `auth`'s `serviceAccount.roleArn`, `signed-worker`'s `keda.queueURL`.
+
+**Deliberately left blocked** (see snaPDF-infra issue #21): every service's `eso.secrets` list stays empty. `snapdf/db-credentials` and `snapdf/jwt-secret` are not Terraform-managed anywhere (confirmed — no `aws_secretsmanager_secret` resource for either path in any `.tf` file; both were created by hand, per Bugs 15/17). Reusing them for prod would be wrong two different ways: `db-credentials` holds *dev's* specific RDS host/password (prod gets its own separate RDS instance); `jwt-secret` is one shared signing key (reusing it means a dev-minted JWT would also be valid in prod — a security isolation issue, not just a data-correctness one).
+
+**⚠️ Do not start the "apply prod" work (infra issue #20) without first resolving infra issue #21 (prod-specific secrets) — every prod pod will crash-loop without it.**
+
 ### Bug 5 — IAM applied before SQS and S3
 - **Error:** `Unknown variable` on `dependency.sqs.outputs.signed_queue_arn` in `dev/iam/terragrunt.hcl`
 - **Cause:** The IAM module references SQS and S3 dependency outputs. When those modules haven't been applied yet, their state files don't exist in S3, so Terragrunt can't resolve the outputs.
