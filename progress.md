@@ -67,6 +67,7 @@ We set up everything needed before touching any real infrastructure. Installed a
 - [x] Fixed — renamed gitops environments/prod → environments/production to match spec namespace naming, also fixed hidden ENV="prod" dependency in all 3 CI workflows ✅ 01/07/2026. Closes snaPDF-gitops issue #2.
 - [x] Added — per-environment resource requests/limits (dev < staging < production) across all 12 values files ✅ 01/07/2026. Closes snaPDF-gitops issue #3.
 - [x] Fixed — production values files completed (env vars, auth's roleArn, signed-worker's queueURL) ✅ 01/07/2026. eso.secrets deliberately left blocked — filed as snaPDF-infra issue #21 (prod-specific db-credentials + jwt-secret don't exist yet). **Must resolve #21 before starting the prod apply (issue #20) or every prod pod will crash-loop.**
+- [x] Dev environment destroyed via destroy.ps1 ✅ 02/07/2026, ~35 min total. Hit and fixed a new issue mid-destroy — orphaned EC2 instance blocking subnet deletion (see Bug 28 in documentation.md). Confirmed fully gone: no EKS cluster, RDS, VPC, or LBs remain. global module (ECR, api-key secret) untouched by design.
 - [ ] Step 11 — Apply prod infra: terragrunt run-all apply in environments/prod
 - [ ] Step 12 — Register prod cluster with ArgoCD: argocd cluster add
 - [ ] Step 13 — Configure ArgoCD webhook — instant sync on snaPDF-gitops push
