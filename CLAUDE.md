@@ -4,11 +4,13 @@
 Build a production-grade cloud infrastructure for a DevOps job interview assessment.
 Demonstrate proficiency in IaC, Kubernetes, GitOps, CI/CD, and secrets management.
 
-## Current State (v0.5.0)
-- Phases 0-3 complete, Phase 4 dev environment fully hardened and verified:
-  full PDF converter app, 3-workflow CI, GitOps via ArgoCD, KEDA genuinely
-  autoscaling signed-worker 0→N off real SQS depth, IAM/ArgoCD drift resolved
-- Next: Phase 4 remaining (prod apply + register + webhook) → v0.6.0
+## Current State (v0.6.1)
+- Phases 0-3 complete, Phase 4 dev environment fully hardened and verified,
+  plus an in-progress spec-compliance pass against the actual requirements doc
+  (Desktop/Infrastructure_Deployment_Task.pdf): ArgoCD RBAC/AppProject split,
+  ConfigMap added to chart, prod->production namespace rename, per-env resource limits
+- Next: remaining spec-compliance issues (see GitHub issue trackers across all 3
+  repos, titled "IMPORTANT ISSUE"), then prod apply + register + webhook → v0.6.0
 
 ## Three Repos
 - **snaPDF** — Flask app code, Dockerfile, CI pipeline, docs (this repo)
