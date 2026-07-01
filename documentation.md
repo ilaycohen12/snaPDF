@@ -932,6 +932,19 @@ Requirements doc (4.2) names the prod namespace explicitly as `production`, not 
 
 Verified live: old `api-prod`/`auth-prod`/`free-worker-prod`/`signed-worker-prod` Applications were pruned automatically, replaced by `api-production`/`auth-production`/`free-worker-production`/`signed-worker-production`, each correctly targeting the `production` namespace and the `prod` AppProject. Closes snaPDF-gitops issue #2.
 
+### Per-environment resource requests/limits added (01/07/2026)
+Requirements doc (6) requires environment-specific overrides for resource limits/requests. Previously every service in every environment silently used the chart's one fixed default. Added a `resources:` block to all 12 environment values files, tiered dev < staging < production, and api/auth (lightweight Flask) < workers (heavier, run LibreOffice conversions):
+
+| Env | api / auth | workers |
+|---|---|---|
+| dev | req 100m/128Mi, limit 300m/384Mi | req 150m/192Mi, limit 400m/512Mi |
+| staging | req 150m/192Mi, limit 400m/512Mi | req 200m/256Mi, limit 500m/640Mi |
+| production | req 250m/256Mi, limit 500m/512Mi | req 500m/512Mi, limit 1000m/1Gi |
+
+Dev/staging numbers stay conservative since both share the same 2×t3.medium dev cluster alongside ~15 addon pods; production gets real headroom since it will run on its own separate cluster. Verified live — new dev pods picked up the correct values after rollout. Closes snaPDF-gitops issue #3.
+
+**Related gaps noticed while doing this (not yet fixed, filed separately):** `environments/production/auth/values.yaml` has no `serviceAccount.roleArn` set at all (would deploy with zero IAM permissions), and `environments/production/signed-worker/values.yaml` has no `queueURL` set (would hit the exact same broken-KEDA-auth failure as Bug 24, since KEDA can't watch an empty queue URL). Both would only surface once prod is actually applied — worth checking before that happens.
+
 ### Bug 5 — IAM applied before SQS and S3
 - **Error:** `Unknown variable` on `dependency.sqs.outputs.signed_queue_arn` in `dev/iam/terragrunt.hcl`
 - **Cause:** The IAM module references SQS and S3 dependency outputs. When those modules haven't been applied yet, their state files don't exist in S3, so Terragrunt can't resolve the outputs.

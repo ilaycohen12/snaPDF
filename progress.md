@@ -65,6 +65,7 @@ We set up everything needed before touching any real infrastructure. Installed a
 - [x] Added — ConfigMap template to the generic chart, switched plain env vars to envFrom configMapRef ✅ 01/07/2026. Closes snaPDF-gitops issue #5.
 - [x] Fixed — ESO Services missing (Bug 27, same root cause as Bug 23 recurring on a different Helm release), fixed via terragrunt apply -replace=helm_release.eso ✅ 01/07/2026.
 - [x] Fixed — renamed gitops environments/prod → environments/production to match spec namespace naming, also fixed hidden ENV="prod" dependency in all 3 CI workflows ✅ 01/07/2026. Closes snaPDF-gitops issue #2.
+- [x] Added — per-environment resource requests/limits (dev < staging < production) across all 12 values files ✅ 01/07/2026. Closes snaPDF-gitops issue #3. Noticed but not yet fixed: production/auth missing serviceAccount.roleArn, production/signed-worker missing queueURL.
 - [ ] Step 11 — Apply prod infra: terragrunt run-all apply in environments/prod
 - [ ] Step 12 — Register prod cluster with ArgoCD: argocd cluster add
 - [ ] Step 13 — Configure ArgoCD webhook — instant sync on snaPDF-gitops push
