@@ -4,13 +4,17 @@
 Build a production-grade cloud infrastructure for a DevOps job interview assessment.
 Demonstrate proficiency in IaC, Kubernetes, GitOps, CI/CD, and secrets management.
 
-## Current State (v0.6.1)
+## Current State (v0.6.2)
 - Phases 0-3 complete, Phase 4 dev environment fully hardened and verified,
   plus an in-progress spec-compliance pass against the actual requirements doc
   (Desktop/Infrastructure_Deployment_Task.pdf): ArgoCD RBAC/AppProject split,
   ConfigMap added to chart, prod->production namespace rename, per-env resource limits
+- Dev infra currently destroyed (cost-saving); needs `terragrunt run-all apply` before
+  anything can be verified live again
+- Issue tracker cleanup done (v0.6.2): closed 21 stale planning issues across app and
+  infra repos that were already implemented in earlier phases
 - Next: remaining spec-compliance issues (see GitHub issue trackers across all 3
-  repos, titled "IMPORTANT ISSUE"), then prod apply + register + webhook → v0.6.0
+  repos, titled "IMPORTANT ISSUE"), then prod apply + register + webhook
 
 ## Three Repos
 - **snaPDF** — Flask app code, Dockerfile, CI pipeline, docs (this repo)

@@ -964,3 +964,14 @@ While adding resource limits, noticed all 4 `environments/production/*/values.ya
 - **Error:** `Unknown variable` on `dependency.sqs.outputs.signed_queue_arn` in `dev/iam/terragrunt.hcl`
 - **Cause:** The IAM module references SQS and S3 dependency outputs. When those modules haven't been applied yet, their state files don't exist in S3, so Terragrunt can't resolve the outputs.
 - **Fix:** Apply SQS and S3 before IAM. The `mock_outputs` in the dependency blocks only work for `plan` and `validate`, not for `apply`.
+
+## Workflow
+
+### Issue tracker cleanup + v0.6.2 (02/07/2026)
+The GitHub issue trackers across all 3 repos had accumulated 21 open issues from the original 26-27/06 planning pass (e.g. "Write Python Flask app," "Add EKS Terraform module," "Add KEDA to addons module") that were actually implemented weeks ago in Phases 0-3 but never closed. Verified each deliverable still exists in its repo (Dockerfiles, CI workflows, Terraform modules for VPC/EKS/addons/SQS/S3/IAM, Helm chart templates including ScaledObject/ExternalSecret/HPA) before closing, so the tracker now reflects actual remaining work rather than a mix of done-and-not-done items.
+
+- Closed in `snaPDF`: #1, #2, #5-#16 (14 issues)
+- Closed in `snaPDF-infra`: #4, #5, #11-#15 (7 issues)
+- Left open (real remaining work): the 4 "IMPORTANT ISSUE" spec-compliance gaps per repo, plus `snaPDF-gitops` #4 and #6, plus `snaPDF-infra` #17
+
+Tagged `v0.6.2` on `snaPDF` (version tags only ever go on the app repo, even when the work spans infra/gitops) to mark the tracker as trustworthy again before starting the next round of prod work.
