@@ -4,31 +4,31 @@
 Build a production-grade cloud infrastructure for a DevOps job interview assessment.
 Demonstrate proficiency in IaC, Kubernetes, GitOps, CI/CD, and secrets management.
 
-## Current State (v0.6.4)
+## Current State (v0.6.5)
+- **Milestone reached 02/07/2026: prod is fully up and serving real traffic end-to-end**
+  (this is the "prod fully up" milestone originally planned as v0.6.0 back on 01/07 — the
+  exact version number drifted since patches kept incrementing the minor version instead
+  of the patch, but the milestone itself landed today under v0.6.5)
 - Phases 0-3 complete, Phase 4 dev environment fully hardened and verified,
   plus an in-progress spec-compliance pass against the actual requirements doc
   (Desktop/Infrastructure_Deployment_Task.pdf): ArgoCD RBAC/AppProject split,
   ConfigMap added to chart, prod->production namespace rename, per-env resource limits
-- Dev AND prod infra are both live (prod came up further than intended during a
-  terragrunt run-all apply on 02/07/2026) — both clusters have Ready nodes, both have
-  independent healthy ArgoCD instances (infra issue #22 satisfied as a side effect)
-- Dev's root ArgoCD bootstrap re-applied (was missed after today's destroy/recreate) —
-  all -dev/-staging Applications Synced/Healthy. Prod's still has zero Applications
-  registered (root bootstrap intentionally not yet applied there, infra issue #17)
+- Dev AND prod infra are both live — both clusters have Ready nodes (prod upgraded
+  t3.small -> t3.medium, matching dev, Bug 30), independent healthy ArgoCD instances
+  each reading only their own cluster's ApplicationSets (`apps/dev` vs `apps/prod`
+  split, infra #23 closed — no more cross-cluster Application generation)
 - ResourceQuota per namespace added via new generic `charts/env-scoped` chart (gitops #6, closed)
-- Prod-specific `snapdf-prod/db-credentials` + `snapdf-prod/jwt-secret` created and wired
-  into all 4 production services' eso.secrets (infra #21, closed)
-- Domain `snapdf.bond` purchased + delegated to Route53; per-environment ingress hosts
-  (dev./staging./prod.snapdf.bond) and ArgoCD hostnames (argocd-dev./argocd-prod.snapdf.bond)
-  live and verified end-to-end, including real host-based routing isolation (gitops #4, closed)
-- Found + fixed Bug 29 (dev's RDS auto-generated password went stale after recreate) and
-  filed infra #23 (ApplicationSets aren't cluster-scoped — must fix before prod's root
-  bootstrap is applied, or prod's ArgoCD would create dev/staging resources in its own cluster)
+- Prod-specific secrets, per-environment ingress hosts on the purchased domain
+  `snapdf.bond` + Route53, and prod's own root ArgoCD bootstrap are all live and
+  verified: `curl http://prod.snapdf.bond/api/` and `/auth/` both return 200, all 5
+  production pods Running, KEDA signed-worker ScaledObject READY:True (infra #21,
+  gitops #4 both closed; Bug 30's IAM trust-policy gap, found only once prod's pods
+  actually started, also fixed)
 - Issue tracker cleanup done (v0.6.2): closed 21 stale planning issues across app and
   infra repos that were already implemented in earlier phases
-- Next: infra #23 (cluster-scope the ApplicationSets), infra #17 (automate ArgoCD root
-  bootstrap), then remaining "IMPORTANT ISSUE" spec-compliance gaps (ALB/TLS, rollback
-  drill, README, architecture diagram)
+- Next: infra #17 (automate ArgoCD root bootstrap so this manual step isn't needed for
+  future clusters), then remaining "IMPORTANT ISSUE" spec-compliance gaps (ALB/TLS,
+  rollback drill, README, architecture diagram)
 
 ## Three Repos
 - **snaPDF** — Flask app code, Dockerfile, CI pipeline, docs (this repo)
