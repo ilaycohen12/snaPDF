@@ -1043,6 +1043,8 @@ While testing `signed-worker-dev`/`signed-worker-production` scaling, found pods
 
 **Applied to dev first, verified, then prod** (same module, same launch-template-replacement pattern as `Bug 30`'s node resize — AWS rolls each old node out one at a time as new ones join). **Verified live on both:** new nodes show `maxPods=35` (`kubectl get nodes -o jsonpath='...status.allocatable.pods'`), and on prod specifically, `signed-worker-production` — which had never successfully scheduled before this fix — came up `Running` immediately once room existed.
 
+**One more gap caught during this test:** `signed-worker-production` took 5m50s to scale back down after finishing a job — same root cause as `Bug 31`'s staging fix, just never applied to production either: no `cooldownPeriod` set, defaulting to the chart's `300`. Added `cooldownPeriod: 15` to `environments/production/signed-worker/values.yaml`, matching dev and staging. Verified live via `kubectl get scaledobject signed-worker-production -o jsonpath='{.spec.cooldownPeriod}'` → `15`.
+
 ## Workflow
 
 ### Issue tracker cleanup + v0.6.2 (02/07/2026)
