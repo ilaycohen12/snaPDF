@@ -1075,6 +1075,17 @@ Replacing the fixed-shape managed node group's "add capacity" story — which re
 
 Not yet done: the same full setup on prod, and shrinking the original managed node group now that Karpenter is proven reliable (deliberately deferred until prod is proven too).
 
+### Phase 6 — Karpenter, prod done too (02/07/2026)
+Repeated the identical sequence on prod: Helm install, subnet tagging, the `aws_eks_access_entry` fix (already known from dev, applied directly this time with zero rediscovery needed), and a prod-specific `NodePool`.
+
+**Prod's NodePool deliberately sized differently from dev's, not just scaled up:** `t3.medium`/`t3.large`/`t3.xlarge` instead of dev's `t3.micro`/`t3.small`/`t3.medium` — prod's worker pods alone need up to 1GiB memory per pod, which doesn't leave realistic headroom on the smaller instance sizes once the per-node DaemonSets are accounted for. Limit set to `9 vCPU / 18GiB` (a deliberate, cost-conscious ceiling — not an attempt to cover prod's theoretical worst-case HPA/KEDA burst, which could reach ~21 vCPU if everything scaled to maximum simultaneously; this project doesn't need to provision for that).
+
+One transient hiccup, unrelated to configuration: the first prod apply hit `http2: client connection lost` mid-install (same class of transient network blip seen earlier today with the S3 backend) — resolved with a plain retry, no code change needed.
+
+**Verified live, both directions, on prod:** test pod requesting more CPU than either existing node had free → Karpenter provisioned a real `t3.medium` node within ~2 minutes → pod ran on it → pod deleted → Karpenter's logs showed it disrupt/taint/drain/delete the now-empty node within about a minute → back to exactly 2 nodes. Real prod app pods (`api`/`auth`/`free-worker`) confirmed undisturbed throughout.
+
+Karpenter is now proven working identically on both clusters. Still not done: shrinking either cluster's original managed node group — deliberately held until a deliberate decision to do so, not automatic just because Karpenter works.
+
 ## Workflow
 
 ### Issue tracker cleanup + v0.6.2 (02/07/2026)
