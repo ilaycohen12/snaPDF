@@ -1011,6 +1011,27 @@ Once prod's root bootstrap actually deployed real app pods, two more problems su
 - **Lesson:** because prod's root bootstrap was deliberately held back all session (correctly, pending `infra #21`/`#23`), prod-specific infra bugs like this one had no way to surface until the exact moment it finally went live — worth remembering that "nothing has deployed into prod yet" doesn't mean "prod's config is known-good," only "untested."
 - **Verified live:** all 5 prod app pods `Running`, `curl http://prod.snapdf.bond/api/` and `/auth/` both `200`, KEDA `ScaledObject` for `signed-worker-production` shows `READY: True`.
 
+### Bug 31 — staging silently shared every AWS resource with dev (02/07/2026)
+Discovered while manually testing signed-PDF conversion through staging: KEDA scaled up `signed-worker-dev` for a job actually submitted through staging, and separately, `signed-worker-staging` stayed active far longer than expected. Root cause: staging was never given its own AWS resources at all — checked every AWS-facing value in `environments/staging/*/values.yaml` against dev's and found identical values everywhere except the already-fixed ingress hosts:
+
+| Resource | Staging's config | Real state |
+|---|---|---|
+| SQS queues | `snapdf-dev-signed`/`free` | literally dev's queues — both `signed-worker-dev` and `signed-worker-staging` independently watch the same queue depth, so a single message could trigger both to scale up, racing to consume it |
+| S3 bucket | `snapdf-dev-pdfs-...` | staging's converted PDFs land in dev's bucket |
+| Database | `snapdf/db-credentials`, `DB_NAME: snapdf` | staging and dev share the literal same database and tables — not just the same RDS instance |
+| JWT secret | `snapdf/jwt-secret` | a token issued by dev's auth is valid on staging's auth and vice versa |
+| `signed-worker` `cooldownPeriod` | never set | defaults to the chart's `300` (5 min), unlike dev's explicit `15` — made staging's worker look "stuck" when it was just slow to deactivate |
+
+**Fix, infra layer:** refactored `infra/modules/sqs` and `infra/modules/s3` from a single hardcoded resource per module to a `for_each` over a new `app_namespaces` variable (same pattern as `Bug 30`'s IAM fix) — dev now creates one signed+free queue pair and one bucket *per* namespace (`dev`, `staging`), prod still creates just one (kept as `app_namespaces = ["prod"]`, not `["production"]`, specifically to preserve the existing resource names already live in AWS — only the `iam` module's `app_namespaces` needs to literally match the k8s namespace name, since that's what feeds the trust-policy `StringLike` condition; `sqs`/`s3` naming is just a string with no such requirement). `infra/modules/iam`'s `signed_queue_arn`/`free_queue_arn`/`bucket_arn` variables became `_arns` lists, and the KEDA/worker policies' `Resource` blocks now list every queue/bucket the cluster's namespaces use instead of just one.
+
+**Terraform refactoring detail worth remembering:** converting a plain resource to a `for_each`'d one changes its address in state (`aws_sqs_queue.signed` → `aws_sqs_queue.signed["dev"]`) even when the underlying AWS object (same name, same ARN) doesn't change at all — `terraform plan` showed this as a destroy+recreate of the *existing* dev/prod queues and bucket the first time. Fixed by running `terragrunt state mv 'aws_sqs_queue.signed' 'aws_sqs_queue.signed["dev"]'` (and the equivalent for `free`, and both `s3` resources, for both dev and prod) *before* applying — this just relabels the existing state entry to the new address without touching the real AWS resource, so the subsequent plan showed only genuinely new resources (`2 to add, 0 to change, 0 to destroy` for dev; `0 to add, 0 to change, 0 to destroy`, output-shape-only, for prod).
+
+**Fix, secrets + database:** created `snapdf-staging/jwt-secret` (fresh, isolated key, same approach as prod's in `infra #21`) via AWS CLI. For the database, rather than a whole 3rd RDS instance (real ongoing cost, not justified for a demo), created a second **logical database** — `snapdf_staging` — on the *same* existing `snapdf-dev-rds` instance, run via `kubectl exec` into `api-dev`'s existing pod (`psycopg2`, already available, already has DB credentials mounted) since the RDS instance itself isn't reachable from outside the VPC. Postgres treats separate databases as fully isolated by default, and the app's own `init_db()` created a fresh, independent set of tables in it automatically — zero app code changes needed, only `DB_NAME` changed in staging's values files. `DB_HOST`/`DB_USER`/`DB_PASSWORD` stay pointed at the same `snapdf/db-credentials` secret, since it's genuinely the same server and admin user — only the database name differs now.
+
+**Fix, gitops:** updated all 4 staging values files (`api`, `auth`, `signed-worker`, `free-worker`) to point at the new queues/bucket/secret/database, plus added the missing `cooldownPeriod: 15`.
+
+**Verified live:** forced an ArgoCD refresh + `kubectl rollout restart` (ConfigMap/Secret changes don't auto-restart already-running pods), confirmed the new pods actually have the new env vars (not just that ArgoCD showed `Synced`), confirmed `free-worker-staging` connects successfully to `snapdf_staging` with zero restarts, and confirmed KEDA's `signed-worker-staging` ScaledObject shows `READY: True` watching `s0-aws-sqs-snapdf-staging-signed` specifically (not dev's queue).
+
 ## Workflow
 
 ### Issue tracker cleanup + v0.6.2 (02/07/2026)
