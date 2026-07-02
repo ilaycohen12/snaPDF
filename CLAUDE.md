@@ -4,7 +4,16 @@
 Build a production-grade cloud infrastructure for a DevOps job interview assessment.
 Demonstrate proficiency in IaC, Kubernetes, GitOps, CI/CD, and secrets management.
 
-## Current State (v0.6.5)
+## Current State (v0.6.6)
+- **Staging fully isolated from dev, 02/07/2026 (Bug 31):** staging previously shared every
+  AWS resource with dev (SQS queues, S3 bucket, JWT secret, and even the same database) —
+  now has its own `snapdf-staging-signed`/`free` queues, `snapdf-staging-pdfs-...` bucket,
+  `snapdf-staging/jwt-secret`, and its own `snapdf_staging` database (a second logical
+  database on the same RDS instance, not a new one — kept cost at zero). `infra/modules/sqs`
+  and `s3` refactored to create one set of resources per namespace (`app_namespaces`
+  pattern, same as Bug 30's IAM fix); `iam`'s KEDA/worker policies updated to grant
+  permissions on all of them. Verified live: new pods confirmed with correct env vars
+  (not just ArgoCD Synced), KEDA's signed-worker-staging watches its own queue specifically.
 - **Milestone reached 02/07/2026: prod is fully up and serving real traffic end-to-end**
   (this is the "prod fully up" milestone originally planned as v0.6.0 back on 01/07 — the
   exact version number drifted since patches kept incrementing the minor version instead
