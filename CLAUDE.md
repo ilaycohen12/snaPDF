@@ -4,7 +4,15 @@
 Build a production-grade cloud infrastructure for a DevOps job interview assessment.
 Demonstrate proficiency in IaC, Kubernetes, GitOps, CI/CD, and secrets management.
 
-## Current State (v0.6.7)
+## Current State (v0.6.8)
+- **Infra #18 closed, 02/07/2026:** real ALB now sits in front of Nginx on both dev and
+  prod — Nginx switched to `ClusterIP` (no longer creates its own load balancer), a new
+  `Ingress` (`ingressClassName: alb`) routes real traffic instead, and DNS repointed at
+  the ALB. Done in two safe phases (new ALB provisioned and verified *before* touching
+  Nginx's existing setup) so there was no downtime window. Unblocks infra #19 (TLS).
+  Also caught and fixed a real process gap: 16 files of already-applied infra changes
+  (staging isolation, prefix delegation, this ALB switchover) had never been committed —
+  committed retroactively in 3 logical commits matching their documentation entries.
 - **Prod's pod-density ceiling fixed, 02/07/2026 (Bug 32):** both dev's and prod's nodes
   now use AWS VPC CNI prefix delegation (raises the per-node pod ceiling from 17 to 100+,
   capped deliberately at `maxPods: 35`) instead of the default one-IP-per-pod scheme that
