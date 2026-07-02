@@ -667,6 +667,28 @@ Today, standing up a brand-new cluster (e.g. prod) requires remembering to run `
 
 **The tradeoff:** this slightly blurs the project's clean rule ("Terraform owns the cluster, ArgoCD owns the apps") since Terraform would now be creating one ArgoCD-level object directly. This is a widely-accepted exception specifically for bootstrapping — not something to generalize to other ArgoCD objects. Not yet implemented as of 01/07/2026 — worth doing before the prod apply (Phase 4 Step 11), so that step doesn't require a manual follow-up.
 
+### ResourceQuota per namespace via new `env-scoped` chart (02/07/2026)
+Requirements doc (4.1) requires a ResourceQuota per namespace (non-optional, unlike NetworkPolicy). Rather than adding a `ResourceQuota` template into the existing `charts/service` chart — which would make one arbitrary service's Application "own" a namespace-wide object, a fragile hidden coupling — added a new generic chart, `charts/env-scoped`, for objects scoped to the whole environment/namespace rather than to one service. This mirrors the existing precedent of `ClusterSecretStore` getting its own `eso-appset.yaml` + `bootstrap/eso/` path instead of being bundled into `services-appset.yaml`.
+
+Structure:
+- `charts/env-scoped/templates/resourcequota.yaml` — the object defined once, gated behind `resourceQuota.enabled` (defaults `false` in the chart's own `values.yaml`, so a missing/incomplete values file fails safe instead of rendering a `ResourceQuota` with blank quantities)
+- `environments/{dev,staging,production}/env-scoped-values.yaml` — one small values file per environment, sitting next to (not inside) each environment's per-service subfolders
+- `apps/env-scoped-appset.yaml` — new ApplicationSet, same `git.directories` generator pattern as `services-appset.yaml` but one level shallower (`environments/dev`, `environments/staging`, `environments/production` themselves, not their service subfolders), so it generates exactly one Application per environment
+
+Quota numbers were sized from each environment's actual configured worst case (HPA/KEDA max replicas × per-pod resource limits already set in each service's values.yaml), plus ~10-15% headroom for a rolling deployment briefly running old+new pod together:
+
+| Env | requests (cpu/mem) | limits (cpu/mem) | pods | worst-case limits sum it's covering |
+|---|---|---|---|---|
+| dev | 1500m / 2048Mi | 3600m / 4608Mi | 16 | 3400m / 4352Mi |
+| staging | 2000m / 2560Mi | 4800m / 6144Mi | 16 | 4400m / 5632Mi |
+| production | 12000m / 12288Mi | 24000m / 24576Mi | 40 | 21000m / 21504Mi |
+
+Note: dev + staging share one 2×t3.medium cluster, so their quotas summed together exceed that cluster's actual physical capacity — this is intentional and normal (the quota's job is capping each namespace relative to its own declared workload, not perfectly bin-packing shared node capacity; real node capacity is a separate, harder backstop that would leave pods `Pending` if actually exceeded). Production's numbers should be revisited once its real node group sizing is decided (infra issue #20, not yet applied).
+
+Chart renders verified locally with `helm template` against all 3 values files before pushing. Not yet verified live — dev cluster is currently destroyed. Closes `snaPDF-gitops` issue #6.
+
+This chart is meant to be the general home for any future namespace-scoped (not per-service) object — e.g. if `LimitRange` or `NetworkPolicy` gets picked up later, it should be added as another conditional template in this same chart with a new section in each environment's `env-scoped-values.yaml`, not a new chart+appset per object type.
+
 ---
 
 ## Secrets
