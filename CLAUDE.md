@@ -4,7 +4,24 @@
 Build a production-grade cloud infrastructure for a DevOps job interview assessment.
 Demonstrate proficiency in IaC, Kubernetes, GitOps, CI/CD, and secrets management.
 
-## Current State (v0.6.8)
+## Current State (v0.7.0)
+- **Milestone reached 02/07/2026: Karpenter fully working on both dev and prod**
+  (this is the "Karpenter done" milestone from the original versioning plan). Node
+  autoscaling replaces the "human notices a scheduling failure, manually runs Terraform"
+  loop that happened 3 times today with automatic provisioning: Karpenter watches for
+  `Pending` pods and launches right-sized nodes on its own, then cleanly terminates
+  them once idle. Verified live on both clusters, both directions (scale-up and
+  scale-down), with real test pods, not just installed-and-assumed-working.
+  Dev capped at 6 vCPU/12GiB (`t3.micro`-`medium`); prod at 9 vCPU/18GiB
+  (`t3.medium`-`xlarge`, sized for prod's heavier per-pod memory needs, not just
+  scaled up from dev's numbers). Found and fixed 2 real bugs along the way: Karpenter
+  v1's `EC2NodeClass` requires explicit `amiSelectorTerms` (not just `amiFamily`), and
+  Karpenter's separately-created node role needed its own EKS access entry to actually
+  join the cluster (the managed node group's role gets this automatically; a
+  Karpenter-launched node doesn't). Original managed node group intentionally left
+  unshrunk for now — Karpenter installed *alongside* existing capacity, not replacing
+  it yet, until a deliberate decision to shrink it.
+
 - **Infra #18 closed, 02/07/2026:** real ALB now sits in front of Nginx on both dev and
   prod — Nginx switched to `ClusterIP` (no longer creates its own load balancer), a new
   `Ingress` (`ingressClassName: alb`) routes real traffic instead, and DNS repointed at
