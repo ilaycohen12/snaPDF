@@ -4,17 +4,24 @@
 Build a production-grade cloud infrastructure for a DevOps job interview assessment.
 Demonstrate proficiency in IaC, Kubernetes, GitOps, CI/CD, and secrets management.
 
-## Current State (v0.6.2)
+## Current State (v0.6.3)
 - Phases 0-3 complete, Phase 4 dev environment fully hardened and verified,
   plus an in-progress spec-compliance pass against the actual requirements doc
   (Desktop/Infrastructure_Deployment_Task.pdf): ArgoCD RBAC/AppProject split,
   ConfigMap added to chart, prod->production namespace rename, per-env resource limits
-- Dev infra currently destroyed (cost-saving); needs `terragrunt run-all apply` before
-  anything can be verified live again
+- Dev AND prod infra are both live (prod came up further than intended during a
+  terragrunt run-all apply on 02/07/2026) — both clusters have Ready nodes, both have
+  independent healthy ArgoCD instances (infra issue #22 satisfied as a side effect)
+- Prod's ArgoCD has zero Applications registered (root bootstrap not yet applied there,
+  infra issue #17) — nothing has actually deployed into `production` yet, which is safe
+- ResourceQuota per namespace added via new generic `charts/env-scoped` chart (gitops #6, closed)
+- Prod-specific `snapdf-prod/db-credentials` + `snapdf-prod/jwt-secret` created and wired
+  into all 4 production services' eso.secrets (infra #21, closed)
 - Issue tracker cleanup done (v0.6.2): closed 21 stale planning issues across app and
   infra repos that were already implemented in earlier phases
-- Next: remaining spec-compliance issues (see GitHub issue trackers across all 3
-  repos, titled "IMPORTANT ISSUE"), then prod apply + register + webhook
+- Next: gitops #4 (per-env ingress hosts, going with a purchased domain + Route53 instead
+  of sslip.io — domain search in progress), infra #17 (automate ArgoCD root bootstrap),
+  then remaining "IMPORTANT ISSUE" spec-compliance gaps
 
 ## Three Repos
 - **snaPDF** — Flask app code, Dockerfile, CI pipeline, docs (this repo)
