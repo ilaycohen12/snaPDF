@@ -1045,6 +1045,17 @@ While testing `signed-worker-dev`/`signed-worker-production` scaling, found pods
 
 **One more gap caught during this test:** `signed-worker-production` took 5m50s to scale back down after finishing a job — same root cause as `Bug 31`'s staging fix, just never applied to production either: no `cooldownPeriod` set, defaulting to the chart's `300`. Added `cooldownPeriod: 15` to `environments/production/signed-worker/values.yaml`, matching dev and staging. Verified live via `kubectl get scaledobject signed-worker-production -o jsonpath='{.spec.cooldownPeriod}'` → `15`.
 
+### Infra #18 — real ALB in front of Nginx, on dev and prod (02/07/2026)
+Previously, Nginx's own `Service` was `type: LoadBalancer`, so Nginx created its own AWS NLB directly, while the separately-installed AWS Load Balancer Controller sat idle — the spec asks for both NGINX *and* real ALB integration as distinct deliverables, and only one was actually doing anything.
+
+**Fix, done in two safe phases to avoid any downtime window:**
+1. **Additive first:** pushed a new `Ingress` object (`nginx-alb`, `ingressClassName: alb`) to `apps/dev/` and `apps/prod/` in `snaPDF-gitops`, pointing at Nginx's Service. This made the ALB Controller provision a real ALB *alongside* the existing NLB — nothing about the old path was touched yet, both clusters kept serving traffic exactly as before while the new ALB came up and was confirmed reachable.
+2. **Cutover, once the ALB was confirmed live:** updated `infra/modules/addons` — Nginx's `helm_release` now sets `controller.service.type = ClusterIP` (it stops requesting its own load balancer), and the Route53 CNAME data source switched from reading Nginx's *Service* status (`data.kubernetes_service`) to reading the new ALB *Ingress*'s status instead (`data.kubernetes_ingress_v1`) — the Service has no load balancer of its own to read a hostname from anymore.
+
+Applied to dev first (`0 to add, 3 to change, 0 to destroy`: the helm release + the 2 `dev`/`staging` CNAME records), verified fully (curl 200s on both, DNS resolving to the ALB, old NLB confirmed gone via `aws elbv2 describe-load-balancers`), then the identical change to prod (`0 to add, 2 to change, 0 to destroy`). **Verified live on both:** traffic flow is now `Client → ALB → Nginx → pods`; only the 2 ArgoCD load balancers remain as `network`-type LBs, confirming no NLBs are left over from the app-facing path on either cluster.
+
+This also unblocks `infra #19` (TLS) — a real ALB has an HTTPS listener to attach a certificate to; the NLB never supported that the same way.
+
 ## Workflow
 
 ### Issue tracker cleanup + v0.6.2 (02/07/2026)
