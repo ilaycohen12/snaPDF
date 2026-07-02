@@ -1056,6 +1056,25 @@ Applied to dev first (`0 to add, 3 to change, 0 to destroy`: the helm release + 
 
 This also unblocks `infra #19` (TLS) — a real ALB has an HTTPS listener to attach a certificate to; the NLB never supported that the same way.
 
+### Phase 6 — Karpenter node autoscaling, dev proven working end-to-end (02/07/2026)
+Replacing the fixed-shape managed node group's "add capacity" story — which required a human to notice a scheduling failure and manually run Terraform every time this project hit one, three separate times today (`Bug 30`, the CPU/pod-density fragmentation issue, and the `t3.xlarge`-vs-3rd-node decision) — with Karpenter, which watches for pods stuck `Pending` and provisions right-sized nodes on its own.
+
+**Sequencing decision:** originally planned to shrink the managed node group first, then add Karpenter. Reversed after checking the actual numbers — dev's total CPU usage (1660m) barely fits one node's 1930m capacity, and prod's (2310m) already *exceeds* it. Shrinking first, before Karpenter exists to react, would have caused real, unrecoverable scheduling failures. Installed Karpenter fully and proved it works *before* touching the existing node group's size.
+
+**Built, in order:**
+1. Two new IAM roles in `infra/modules/iam` — a controller role (IRSA, scoped EC2/pricing/SSM read + tightly-scoped `iam:PassRole` to just the node role, not wildcard) and a node role (standard AWS-managed EKS worker policies) + its instance profile. Applied to both dev and prod.
+2. Karpenter itself via Helm, added to `infra/modules/addons`, dev only for now.
+3. Tagged dev's 2 private subnets with `karpenter.sh/discovery` (a new tag — existing tags like `Environment: dev` weren't precise enough, they also match the public/database subnets).
+4. `EC2NodeClass` + `NodePool` manifests pushed to `snaPDF-gitops`'s `apps/dev/` — capped at `t3.micro`/`t3.small`/`t3.medium` only (all three share identical 2 vCPU, so the `6 vCPU` limit maps to *exactly* 3 nodes regardless of which size Karpenter picks), On-Demand only (no Spot interruption handling built yet).
+
+**Hit and fixed one real bug during the first live test:** the `EC2NodeClass` initially failed validation (`spec.amiSelectorTerms: Required value`) — Karpenter's v1 API requires explicit AMI selection now, `amiFamily` alone isn't sufficient; fixed with `amiSelectorTerms: [{alias: al2023@latest}]`.
+
+**Hit and fixed a second, more interesting bug:** the very first test node booted fine at the EC2/OS level (confirmed `running` in AWS) but its `NodeClaim` sat on `"Node not registered with cluster"` indefinitely. Cause: EKS requires an IAM role to be explicitly authorized before an EC2 instance using it can join as a node (via the `aws-auth` ConfigMap or an "access entry") — the managed node group's role gets this automatically as part of its own setup, but Karpenter's separately-created node role never went through that path. Fixed live via `aws eks create-access-entry --type EC2_LINUX`, then formalized into Terraform as an `aws_eks_access_entry` resource in `infra/modules/addons` (not `eks` or `iam` — `eks` can't depend on `iam`'s node-role output without creating a circular dependency, since `iam` already depends on `eks` for the OIDC provider) and imported the manually-created entry into state so it wasn't left as an undocumented manual change.
+
+**Verified live, both directions:** deployed a test pod requesting more CPU than either existing node had free — watched Karpenter's logs react within ~3 seconds (found the pending pod, computed a `t3.micro` NodeClaim, launched it), watched the real EC2 instance boot and register (~2 min, mostly normal AWS boot time), and watched the pod actually run on it. Then deleted the test pod and watched Karpenter's consolidation cleanly terminate the now-empty node on its own — back to exactly 2 nodes, no manual cleanup needed.
+
+Not yet done: the same full setup on prod, and shrinking the original managed node group now that Karpenter is proven reliable (deliberately deferred until prod is proven too).
+
 ## Workflow
 
 ### Issue tracker cleanup + v0.6.2 (02/07/2026)
