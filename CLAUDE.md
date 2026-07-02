@@ -4,7 +4,13 @@
 Build a production-grade cloud infrastructure for a DevOps job interview assessment.
 Demonstrate proficiency in IaC, Kubernetes, GitOps, CI/CD, and secrets management.
 
-## Current State (v0.6.6)
+## Current State (v0.6.7)
+- **Prod's pod-density ceiling fixed, 02/07/2026 (Bug 32):** both dev's and prod's nodes
+  now use AWS VPC CNI prefix delegation (raises the per-node pod ceiling from 17 to 100+,
+  capped deliberately at `maxPods: 35`) instead of the default one-IP-per-pod scheme that
+  was silently limiting `t3.medium` to 17 pods/node regardless of spare CPU. `signed-worker-
+  production`, which had never successfully scheduled before this, is now Running.
+  VPC CNI also formally brought under Terraform management for the first time.
 - **Staging fully isolated from dev, 02/07/2026 (Bug 31):** staging previously shared every
   AWS resource with dev (SQS queues, S3 bucket, JWT secret, and even the same database) —
   now has its own `snapdf-staging-signed`/`free` queues, `snapdf-staging-pdfs-...` bucket,
