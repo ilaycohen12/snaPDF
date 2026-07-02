@@ -975,3 +975,10 @@ The GitHub issue trackers across all 3 repos had accumulated 21 open issues from
 - Left open (real remaining work): the 4 "IMPORTANT ISSUE" spec-compliance gaps per repo, plus `snaPDF-gitops` #4 and #6, plus `snaPDF-infra` #17
 
 Tagged `v0.6.2` on `snaPDF` (version tags only ever go on the app repo, even when the work spans infra/gitops) to mark the tracker as trustworthy again before starting the next round of prod work.
+
+### Scope decisions reversed on 3 remaining issues (02/07/2026)
+Three issues originally scoped as "document the deviation, spec allows it" were reversed to "implement literally what the spec asks":
+
+- **ArgoCD: one instance per cluster, not one shared instance.** Supersedes the "Final Architecture Decision" and "Single ArgoCD instance vs one per cluster" reasoning documented on 30/06/2026 — that reasoning is no longer the plan. Prod's `addons` module will install its own `helm_release.argocd` instead of prod being registered as a remote cluster inside dev's instance. Closed `snaPDF` issue #18 (doc-only version); replaced with `snaPDF-infra` issue #22 (actual deployment). Also removes the "register prod cluster with ArgoCD" item from the Phase 4 remaining-steps list.
+- **TLS termination: implement it, not just write it down.** `snaPDF-infra` issue #19 now requires actually attaching a real ACM cert to the ALB's 443 listener and confirming HTTPS terminates there, not just documenting the intended strategy. Still hard-blocked on issue #18 (ALB in front of Nginx) existing first.
+- **Rollback: exercise it once, not just describe it.** `snaPDF` issue #19 now requires actually shipping a change, then `git revert`-ing it and confirming ArgoCD auto-syncs back — proof it works, not just a paragraph asserting it would.
