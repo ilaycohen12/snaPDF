@@ -4,7 +4,7 @@
 Build a production-grade cloud infrastructure for a DevOps job interview assessment.
 Demonstrate proficiency in IaC, Kubernetes, GitOps, CI/CD, and secrets management.
 
-## Current State (v0.8.1)
+## Current State (v1.0.0)
 - **Infra #17 closed, 04/07/2026, v0.8.1: ArgoCD's root Application bootstrap automated end-to-end.**
   Previously the one manual step left in the whole system — `kubectl apply -f
   infra/bootstrap/root-app{,-prod}.yaml` — had to be run by hand after every fresh
@@ -97,10 +97,12 @@ Demonstrate proficiency in IaC, Kubernetes, GitOps, CI/CD, and secrets managemen
   actually started, also fixed)
 - Issue tracker cleanup done (v0.6.2): closed 21 stale planning issues across app and
   infra repos that were already implemented in earlier phases
-- Next: snaPDF #22 (JWT signature verification bug) + infra #20 (formal prod
-  end-to-end verification/closure) → v1.0.0. Remaining lower-priority: snaPDF #20
-  (README), #21 (architecture diagram), #23 (logout button); infra #24 (shrink
-  managed node group), #25 (GitHub → ArgoCD webhook)
+- **v1.0.0 tagged 04/07/2026.** snaPDF #22 (JWT signature verification), infra #24
+  (node group shrink) and #25 (GitHub → ArgoCD webhook) all closed same day; observability
+  and TLS confirmed live on both dev and prod. infra #20 (formal prod end-to-end
+  verification) is functionally satisfied (all 4 acceptance criteria met, including the
+  webhook) but still open on GitHub pending formal closure. Remaining lower-priority,
+  non-gating: snaPDF #20 (README), #21 (architecture diagram), #23 (logout button)
 
 ## Three Repos
 - **snaPDF** — Flask app code, Dockerfile, CI pipeline, docs (this repo)
@@ -147,7 +149,7 @@ Each `v0.x.0` = one major phase/milestone genuinely complete and verified — no
 | v0.7.0 | Karpenter (Phase 6) done |
 | v0.8.0 | Observability / Grafana (Phase 5) done |
 | v0.8.1 | Infra #17 — ArgoCD root bootstrap automated (no more manual step, any cluster) |
-| v1.0.0 | **Final release** — all tests passing + README finalized + applied — redefined 01/07/2026 |
+| v1.0.0 | **Final release** — all tests passing — redefined 04/07/2026 (README no longer a gating requirement) |
 
 **Patch versions track in-progress work within the current phase** — e.g. once at v0.5.0, incremental changes while building toward prod (v0.6.0) get tagged v0.5.1, v0.5.2, etc. Once the next milestone (v0.6.0) is actually reached, jump straight to it — patch numbers reset per minor version, they don't count up forever.
 
