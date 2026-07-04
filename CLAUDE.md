@@ -4,7 +4,38 @@
 Build a production-grade cloud infrastructure for a DevOps job interview assessment.
 Demonstrate proficiency in IaC, Kubernetes, GitOps, CI/CD, and secrets management.
 
-## Current State (v0.7.0)
+## Current State (v0.8.1)
+- **Infra #17 closed, 04/07/2026, v0.8.1: ArgoCD's root Application bootstrap automated end-to-end.**
+  Previously the one manual step left in the whole system — `kubectl apply -f
+  infra/bootstrap/root-app{,-prod}.yaml` — had to be run by hand after every fresh
+  cluster stand-up, using the right file for the right cluster. Automated via a
+  `null_resource` + `local-exec` in the `addons` module that inlines the manifest and
+  picks the path (`apps/dev` vs `apps/prod`) by `var.env_name`, so there's no file to
+  remember or mismatch (the old `infra/bootstrap/*.yaml` files were deleted — one
+  source of truth now, not two). A second `null_resource` polls until the ALB
+  Controller has actually provisioned real load balancer hostnames for `nginx-alb`
+  and `argocd-server` before Terraform's Route53 records try to read them, replacing
+  the targeted-apply → manual-bootstrap → wait → full-apply dance that was needed by
+  hand on every from-zero rebuild since 03/07. Directly motivated by a real incident
+  this same session: applying the wrong root-app file to prod briefly ran dev/staging
+  workloads inside the prod cluster (cleaned up by hand, no lasting damage). Verified
+  end-to-end on both dev and prod: `terragrunt run-all apply` now stands a cluster up
+  fully unattended, zero manual steps, zero race against ArgoCD/ALB timing.
+- **Milestone reached 04/07/2026: Phase 5 (Observability/Grafana), v0.8.0.**
+  `kube-prometheus-stack` (Prometheus, Grafana, Alertmanager, node-exporter,
+  kube-state-metrics) + `postgres-exporter` (business metrics: total users, free/signed
+  jobs by status) + KEDA scaler metrics all installed and verified live on dev. A
+  custom "snaPDF - Business & Scaling Metrics" dashboard was built entirely as code
+  (a `ConfigMap` + Grafana's dashboard-sidecar auto-load pattern) instead of built by
+  hand in the UI — survives every cluster rebuild by design. Not yet applied to prod.
+- **Also fixed this session (04/07/2026), same root cause recurring (Bug 29's pattern):**
+  a from-scratch full-VPC rebuild of both dev and prod left `snapdf{,-prod}/db-credentials`
+  holding stale passwords (RDS regenerates a new one on every real recreate) and dev
+  missing its `snapdf_staging` logical database (Terraform only manages the default
+  database) — both now automated instead of manual: the `rds` module keeps the
+  consolidated secret in sync with the real master password on every apply, and the
+  `addons` module runs a self-contained Job that recreates `snapdf_staging` only when
+  the RDS instance is genuinely new (keyed to its `resource_id`).
 - **Milestone reached 02/07/2026: Karpenter fully working on both dev and prod**
   (this is the "Karpenter done" milestone from the original versioning plan). Node
   autoscaling replaces the "human notices a scheduling failure, manually runs Terraform"
@@ -66,9 +97,10 @@ Demonstrate proficiency in IaC, Kubernetes, GitOps, CI/CD, and secrets managemen
   actually started, also fixed)
 - Issue tracker cleanup done (v0.6.2): closed 21 stale planning issues across app and
   infra repos that were already implemented in earlier phases
-- Next: infra #17 (automate ArgoCD root bootstrap so this manual step isn't needed for
-  future clusters), then remaining "IMPORTANT ISSUE" spec-compliance gaps (ALB/TLS,
-  rollback drill, README, architecture diagram)
+- Next: snaPDF #22 (JWT signature verification bug) + infra #20 (formal prod
+  end-to-end verification/closure) → v1.0.0. Remaining lower-priority: snaPDF #20
+  (README), #21 (architecture diagram), #23 (logout button); infra #24 (shrink
+  managed node group), #25 (GitHub → ArgoCD webhook)
 
 ## Three Repos
 - **snaPDF** — Flask app code, Dockerfile, CI pipeline, docs (this repo)
@@ -114,6 +146,7 @@ Each `v0.x.0` = one major phase/milestone genuinely complete and verified — no
 | v0.6.0 | Prod environment fully up (Phase 4 100% complete — steps 11-13) |
 | v0.7.0 | Karpenter (Phase 6) done |
 | v0.8.0 | Observability / Grafana (Phase 5) done |
+| v0.8.1 | Infra #17 — ArgoCD root bootstrap automated (no more manual step, any cluster) |
 | v1.0.0 | **Final release** — all tests passing + README finalized + applied — redefined 01/07/2026 |
 
 **Patch versions track in-progress work within the current phase** — e.g. once at v0.5.0, incremental changes while building toward prod (v0.6.0) get tagged v0.5.1, v0.5.2, etc. Once the next milestone (v0.6.0) is actually reached, jump straight to it — patch numbers reset per minor version, they don't count up forever.
