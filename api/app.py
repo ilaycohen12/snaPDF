@@ -103,30 +103,38 @@ PAGE = """
       const headers = {};
       if (token) headers['Authorization'] = 'Bearer ' + token;
 
-      const res  = await fetch('/convert', { method: 'POST', headers, body: data });
-      const json = await res.json();
+      try {
+        const res  = await fetch('/convert', { method: 'POST', headers, body: data });
+        const json = await res.json();
 
-      btn.disabled = false;
-      btn.textContent = 'Convert to PDF';
+        if (!res.ok) { result.textContent = 'Error: ' + json.error; return; }
 
-      if (!res.ok) { result.textContent = 'Error: ' + json.error; return; }
-
-      const tier = json.queue === 'signed' ? 'Signed (priority)' : 'Free';
-      result.innerHTML = 'Job submitted &mdash; <strong>' + tier + '</strong> queue<br>'
-        + 'ID: <code>' + json.job_id + '</code><br><br>Checking status...';
-      poll(json.job_id);
+        const tier = json.queue === 'signed' ? 'Signed (priority)' : 'Free';
+        result.innerHTML = 'Job submitted &mdash; <strong>' + tier + '</strong> queue<br>'
+          + 'ID: <code>' + json.job_id + '</code><br><br>Checking status...';
+        poll(json.job_id);
+      } catch (err) {
+        result.textContent = 'Error: request failed (' + err.message + ')';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Convert to PDF';
+      }
     });
 
     async function poll(jobId) {
-      const res  = await fetch('/jobs/' + jobId);
-      const json = await res.json();
-      if (json.status === 'done') {
-        document.getElementById('result').innerHTML =
-          'Done! <a href="' + json.download_url + '" target="_blank">Download PDF</a>';
-      } else if (json.status === 'failed') {
-        document.getElementById('result').innerHTML = 'Conversion failed. Please try again.';
-      } else {
-        setTimeout(() => poll(jobId), 3000);
+      try {
+        const res  = await fetch('/jobs/' + jobId);
+        const json = await res.json();
+        if (json.status === 'done') {
+          document.getElementById('result').innerHTML =
+            'Done! <a href="' + json.download_url + '" target="_blank">Download PDF</a>';
+        } else if (json.status === 'failed') {
+          document.getElementById('result').innerHTML = 'Conversion failed. Please try again.';
+        } else {
+          setTimeout(() => poll(jobId), 3000);
+        }
+      } catch (err) {
+        document.getElementById('result').textContent = 'Error: lost connection while checking status (' + err.message + ')';
       }
     }
   </script>
