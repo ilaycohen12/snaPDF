@@ -5,6 +5,7 @@ Build a production-grade cloud infrastructure for a DevOps job interview assessm
 Demonstrate proficiency in IaC, Kubernetes, GitOps, CI/CD, and secrets management.
 
 ## Current State (v1.0.0)
+- **Both dev and prod destroyed simultaneously, 05/07/2026 — first real destroy since Karpenter/webhook/Bug-36's hook rewrite, all three turned out untested against a live teardown.** Found and fixed 4 new destroy-time bugs (39-42): the ALB-cleanup hook's bash script broke over the WSL/Windows quoting boundary (rewritten in PowerShell); the new instant-sync webhook raced `destroy.ps1`'s manual Ingress cleanup faster than ArgoCD's old poll interval ever could; Karpenter-provisioned EC2 instances got orphaned when its Helm release was uninstalled before they could self-terminate; and AWS's own implicit EKS cluster security group didn't clean up in time, blocking final VPC teardown on both. Full writeup in documentation.md. **Both environments currently destroyed — nothing running, no cost accruing** (verified: `aws eks list-clusters`, `describe-vpcs`, `describe-db-instances` all empty).
 - **Infra #17 closed, 04/07/2026, v0.8.1: ArgoCD's root Application bootstrap automated end-to-end.**
   Previously the one manual step left in the whole system — `kubectl apply -f
   infra/bootstrap/root-app{,-prod}.yaml` — had to be run by hand after every fresh
