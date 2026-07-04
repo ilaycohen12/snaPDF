@@ -103,7 +103,7 @@ PAGE = """
       const headers = {};
       if (token) headers['Authorization'] = 'Bearer ' + token;
 
-      const res  = await fetch('/api/convert', { method: 'POST', headers, body: data });
+      const res  = await fetch('/convert', { method: 'POST', headers, body: data });
       const json = await res.json();
 
       btn.disabled = false;
@@ -118,7 +118,7 @@ PAGE = """
     });
 
     async function poll(jobId) {
-      const res  = await fetch('/api/jobs/' + jobId);
+      const res  = await fetch('/jobs/' + jobId);
       const json = await res.json();
       if (json.status === 'done') {
         document.getElementById('result').innerHTML =
