@@ -66,7 +66,7 @@ LOGIN_PAGE = """
     <input type="text" name="username" required autofocus>
     <label>Password</label>
     <input type="password" name="password" required>
-    <button type="submit">Sign In BROKEN</button>
+    <button type="submit">Sign In</button>
   </form>
   <p class="links">
     <a href="/auth/signup">Create an account &rarr;</a>
