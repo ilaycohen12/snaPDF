@@ -61,21 +61,25 @@ PAGE = """
   <p class="login-link" id="login-hint"></p>
 
   <script>
-    // Read JWT from ?token= URL param (set by auth service after login)
+    // Read JWT from ?token= URL param (set by auth service after login) -- only
+    // used below to attach it as a Bearer header on submit. The badge is never
+    // decoded client-side: the server already verified the signature (decode_jwt()
+    // in app.py) and rendered the real, trusted username/tier as verifiedUsername/
+    // verifiedTier below -- a forged token can no longer make this badge lie.
     const params = new URLSearchParams(window.location.search);
     const token  = params.get('token') || '';
 
     const badge = document.getElementById('tier-badge');
     const hint  = document.getElementById('login-hint');
 
-    if (token) {
-      // Decode payload (no verification -- server verifies on submit)
-      try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        badge.innerHTML = '<span class="badge signed">Signed in as ' + payload.sub + ' &mdash; Priority Queue</span>';
-      } catch(e) {
-        badge.innerHTML = '<span class="badge free">Free Tier</span>';
-      }
+    const verifiedUsername = {{ username | tojson }};
+    const verifiedTier     = {{ tier | tojson }};
+
+    if (verifiedTier === 'signed') {
+      const span = document.createElement('span');
+      span.className = 'badge signed';
+      span.textContent = 'Signed in as ' + verifiedUsername + ' — Priority Queue';
+      badge.appendChild(span);
     } else {
       badge.innerHTML = '<span class="badge free">Free Tier</span>';
       if ('{{ auth_url }}') {
@@ -146,7 +150,9 @@ def get_db():
 
 @app.route("/")
 def index():
-    return render_template_string(PAGE, auth_url=AUTH_URL)
+    token = request.args.get("token", "")
+    username, tier = decode_jwt(token) if token else (None, None)
+    return render_template_string(PAGE, auth_url=AUTH_URL, username=username, tier=tier)
 
 
 @app.route("/health")
