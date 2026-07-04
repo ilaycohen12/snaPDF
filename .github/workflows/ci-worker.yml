@@ -40,9 +40,8 @@ jobs:
         run: |
           IMAGE=086241318869.dkr.ecr.us-east-1.amazonaws.com/snapdf-worker
           SHA=${{ github.sha }}
-          docker build -t $IMAGE:$SHA -t $IMAGE:latest ./worker
+          docker build -t $IMAGE:$SHA ./worker
           docker push $IMAGE:$SHA
-          docker push $IMAGE:latest
 
       - name: Update image tag in gitops repo
         run: |
