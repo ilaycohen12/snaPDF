@@ -38,10 +38,13 @@ jobs:
 
       - name: Build and push image
         run: |
+          VERSION=$(cat api/VERSION)
           IMAGE=086241318869.dkr.ecr.us-east-1.amazonaws.com/snapdf-api
           SHA=${{ github.sha }}
-          docker build -t $IMAGE:$SHA ./api
+          docker build -t $IMAGE:$VERSION -t $IMAGE:$SHA ./api
+          docker push $IMAGE:$VERSION
           docker push $IMAGE:$SHA
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Update image tag in gitops repo
         run: |
@@ -52,9 +55,9 @@ jobs:
           fi
           git clone https://x-access-token:${{ secrets.GITOPS_TOKEN }}@github.com/ilaycohen12/snaPDF-gitops.git
           cd snaPDF-gitops
-          sed -i "s|tag:.*|tag: ${{ github.sha }}|g" environments/$ENV/api/values.yaml
+          sed -i "s|tag:.*|tag: ${{ env.VERSION }}|g" environments/$ENV/api/values.yaml
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add environments/$ENV/api/values.yaml
-          git commit -m "ci: update api image tag to ${{ github.sha }} ($ENV)"
+          git commit -m "ci: update api image tag to ${{ env.VERSION }} ($ENV) [sha: ${{ github.sha }}]"
           git push
