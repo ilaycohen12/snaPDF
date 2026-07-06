@@ -1,9 +1,26 @@
 # snaPDF
 
 ## Overview
-
+snaPDF is a PDF conversion SaaS built end-to-end as a production-grade
+system: upload a document, it's converted asynchronously, download the
+result — a free tier for anonymous users, a signed tier for
+authenticated ones.
 ## repos
+The system spans three repositories with deliberately designed
+boundaries — split by *who changes it and what a change means*:
 
+| Repo | Owns | A commit here means |
+|---|---|---|
+| **[snaPDF](https://github.com/ilaycohen12/snaPDF)** | Application code, Dockerfiles, tests, CI | CI builds an image and bumps a tag in gitops |
+| **[snaPDF-infra](https://github.com/ilaycohen12/snaPDF-infra)** | Every AWS resource — VPC, EKS, RDS, SQS, S3, IAM, autoscaling, observability, ArgoCD itself | Nothing, until a human runs `terragrunt apply` |
+| **[snaPDF-gitops](https://github.com/ilaycohen12/snaPDF-gitops)** | What runs in the clusters — ApplicationSets, one generic Helm chart, per-env values | ArgoCD deploys it within seconds |
+
+They connect at exactly two points: infra's last act installs ArgoCD and
+plants one root Application pointing at gitops; and app CI's last act
+commits an image-tag bump into gitops. No other repo touches another —
+and no actor holds both git-write and cluster access.
+
+Each repo's README covers its own layer in depth.
 ## Usage
 
 ### Using the app (end user)
@@ -51,9 +68,49 @@ Secrets Manager) instead of waiting on the 3-minute poll. Deploys land in
 seconds; the poll stays as the safety net when a webhook is lost — push
 for speed, pull for correctness.
 ## documentation
+The project is documented the way it was built — as a running engineering
+log, not an afterthought. there were three living documents in the app repo:
 
+- **(documentation.md)** — the core log: every key
+  decision with its reasoning (Terragrunt over Terraform, two queues,
+  LibreOffice, …) and every bug hit along the way — 45+ entries, each
+  with symptom, root cause, fix, and verification. Entries are written
+  the same day the work happened.
+- **(progress.md)** — chronological build log: what was
+  done, when, in what order.
+- **(explanations.md)** — concepts learned during the
+  build, written up in plain language (IRSA mechanics, ENI/IP pod limits,
+  ArgoCD generators, …).
 ## bugs i run into
+45+ bugs are logged in [documentation.md](documentation.md) with root
+cause, fix, and live verification. Three that are worth your time:
 
+**[Bug 24 — KEDA never actually authenticated to AWS](documentation.md)**
+signed-worker ignored its 0–3 scaling range with no error anywhere. Three
+stacked causes: a Helm `set` key that didn't exist in the chart schema
+(Helm accepts unknown keys silently), KEDA defaulting to the *workload's*
+identity instead of its own scoped role (`identityOwner`), and an
+operator pod older than its own IAM annotation — IRSA injects credentials
+only at pod creation. Fixes spanned both repos plus a rollout restart.
+
+**[Bug 32 — the 17-pod ceiling was an IP limit, not a CPU limit](documentation.md)**
+Pods Pending on a cluster that was only ~73% utilized. The real limit:
+VPC CNI gives each pod a real IP from the node's ENIs — t3.medium's math
+is 3 ENIs × 5 + 2 = 17 pods, a networking constant no bigger t3 fixes.
+Fixed with CNI prefix delegation, deliberately capped at maxPods 35, and
+the CNI brought under Terraform management for the first time.
+
+**[Bug 38 — a rollback drill's break resurfaced in prod a day later](documentation.md)**
+A drill intentionally broke a button to practice gitops rollback. The
+rollback — reverting the tag-bump commit — restored the *deployment* but
+left the broken line in `main`'s source. One fast-forward promotion
+later, fresh images built from `main`'s tip shipped it to production.
+Lesson: a deployment rollback and a source fix are different operations;
+now every rollback is followed by a source-level revert or fix-forward.
 ## AI
+On this project, I used claude.md and claude skills 
+It was used as a learning accelerator and pair engineer throughout — but as engineered tooling: CLAUDE.md holds standing project context, and custom skills encode the repo's conventions (bug-entry format, module structure, PR format).
 
+## summary
+This is the second DevOps project ive made, and I really feel that i learned a lot of things much better. thank you for the opportunity and I hope you like my work!
 
