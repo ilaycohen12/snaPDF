@@ -11,7 +11,7 @@ app = Flask(__name__)
 SIGNED_QUEUE_URL = os.environ["SIGNED_QUEUE_URL"]
 FREE_QUEUE_URL   = os.environ["FREE_QUEUE_URL"]
 S3_BUCKET        = os.environ["S3_BUCKET"]
-JWT_SECRET       = os.environ.get("JWT_SECRET", "dev-secret-change-me")
+JWT_SECRET       = os.environ["JWT_SECRET"]
 AUTH_URL         = os.environ.get("AUTH_URL", "")
 DB_HOST          = os.environ["DB_HOST"]
 DB_NAME          = os.environ.get("DB_NAME", "snapdf")
@@ -61,11 +61,6 @@ PAGE = """
   <p class="login-link" id="login-hint"></p>
 
   <script>
-    // Read JWT from ?token= URL param (set by auth service after login) -- only
-    // used below to attach it as a Bearer header on submit. The badge is never
-    // decoded client-side: the server already verified the signature (decode_jwt()
-    // in app.py) and rendered the real, trusted username/tier as verifiedUsername/
-    // verifiedTier below -- a forged token can no longer make this badge lie.
     const params = new URLSearchParams(window.location.search);
     const token  = params.get('token') || '';
 
@@ -177,7 +172,6 @@ def convert():
     if not file.filename.endswith(".docx"):
         return jsonify({"error": "only .docx files are supported"}), 400
 
-    # Determine tier from JWT
     auth_header = request.headers.get("Authorization", "")
     token = auth_header[len("Bearer "):] if auth_header.startswith("Bearer ") else ""
     username, tier = decode_jwt(token)

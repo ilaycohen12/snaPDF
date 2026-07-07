@@ -1,6 +1,5 @@
 import os
 import datetime
-# testing
 import bcrypt
 import jwt
 import psycopg2
@@ -8,7 +7,7 @@ from flask import Flask, request, jsonify, redirect, render_template_string
 
 app = Flask(__name__)
 
-JWT_SECRET = os.environ.get("JWT_SECRET", "dev-secret-change-me")
+JWT_SECRET = os.environ["JWT_SECRET"]
 API_URL    = os.environ.get("API_URL", "http://localhost:5001")
 DB_HOST    = os.environ["DB_HOST"]
 DB_NAME    = os.environ.get("DB_NAME", "snapdf")
@@ -152,7 +151,6 @@ def signup():
     except psycopg2.errors.UniqueViolation:
         return render_template_string(SIGNUP_PAGE, error="Username already taken."), 409
 
-    # Auto-login after signup
     return _issue_jwt_redirect(username)
 
 
@@ -209,7 +207,7 @@ with app.app_context():
     try:
         init_db()
     except Exception:
-        pass  # DB may not be available at startup in dev -- worker retries on first request
+        pass
 
 
 if __name__ == "__main__":

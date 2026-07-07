@@ -31,7 +31,7 @@ def test_index_returns_200(client):
 def test_index_with_no_token_shows_free_tier(client):
     res = client.get("/")
     body = res.get_data(as_text=True)
-    assert 'verifiedTier     = "free"' not in body  # tier is None, not the string "free"
+    assert 'verifiedTier     = "free"' not in body
     assert "verifiedTier     = null" in body
 
 
@@ -44,10 +44,6 @@ def test_index_with_valid_signed_jwt_verifies_and_shows_username(client):
 
 
 def test_index_with_forged_jwt_does_not_trust_payload(client):
-    # Same payload as a real signed token, but signed with the wrong secret --
-    # exactly what an attacker crafting a fake token in devtools would produce.
-    # Bug #22: this used to be trusted anyway because the badge only base64-decoded
-    # the payload client-side and never checked the signature at all.
     forged = jwt.encode({"sub": "attacker", "tier": "signed"}, "wrong-secret", algorithm="HS256")
     res = client.get(f"/?token={forged}")
     body = res.get_data(as_text=True)

@@ -26,6 +26,7 @@ jobs:
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
 
+      # ----- Test -----
       - name: Lint
         run: |
           pip install flake8
@@ -36,6 +37,7 @@ jobs:
           pip install -r worker/requirements.txt pytest
           pytest worker/tests/ -v
 
+      # ----- Build & Release -----
       - name: Build and push image
         run: |
           VERSION=$(cat worker/VERSION)
