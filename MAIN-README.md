@@ -27,8 +27,7 @@ Each repo's README covers its own layer in depth.
 
 ### Using the app (end user)
 
-1. Open [snapdf.bond](https://snapdf.bond) (or `dev.snapdf.bond` /
-   `staging.snapdf.bond`).
+1. Open [snapdf.bond](https://snapdf.bond)
 2. **Free tier** — upload a document, wait, download the PDF. No account.
 3. **Signed tier** — register and log in first; your jobs go through the
    dedicated signed queue and workers (the ones that scale from zero).
